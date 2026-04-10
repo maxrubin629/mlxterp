@@ -5,9 +5,40 @@ This module provides utilities to resolve common model components (embedding,
 final norm, lm_head) across different model architectures using fallback chains.
 """
 
-import mlx.nn as nn
-from typing import Optional, Tuple, Any
 import warnings
+from typing import Any, Dict, Optional, Tuple
+
+import mlx.nn as nn
+
+_WRAPPER_PREFIXES = (
+    "model.language_model.model.",
+    "language_model.model.",
+    "model.model.",
+    "model.language_model.",
+    "language_model.",
+    "model.",
+)
+
+
+def _canonicalize_module_name(name: str) -> str:
+    """
+    Remove known wrapper prefixes from a module or activation name.
+
+    Args:
+        name: Module or activation key to normalize
+
+    Returns:
+        Canonical name without wrapper prefixes
+    """
+    normalized = name
+
+    while True:
+        for prefix in _WRAPPER_PREFIXES:
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix) :]
+                break
+        else:
+            return normalized
 
 
 class ModuleResolver:
@@ -30,33 +61,43 @@ class ModuleResolver:
 
     # Fallback chains for different components
     EMBEDDING_PATHS = [
-        "model.embed_tokens",       # mlx-lm single-wrapped
-        "model.model.embed_tokens", # mlx-lm double-wrapped
-        "embed_tokens",             # direct
-        "tok_embeddings",           # some Llama implementations
-        "wte",                      # GPT-2 style (direct)
-        "model.wte",                # GPT-2 single-wrapped
-        "model.model.wte",          # GPT-2 double-wrapped
-        "embeddings.word_embeddings", # BERT style
-        "transformer.wte",          # GPT with transformer wrapper
+        "language_model.model.embed_tokens",  # nested language_model.model wrapper
+        "language_model.embed_tokens",  # language_model wrapper
+        "model.embed_tokens",  # mlx-lm single-wrapped
+        "model.model.embed_tokens",  # mlx-lm double-wrapped
+        "embed_tokens",  # direct
+        "tok_embeddings",  # some Llama implementations
+        "wte",  # GPT-2 style (direct)
+        "model.wte",  # GPT-2 single-wrapped
+        "model.model.wte",  # GPT-2 double-wrapped
+        "embeddings.word_embeddings",  # BERT style
+        "transformer.wte",  # GPT with transformer wrapper
     ]
 
     NORM_PATHS = [
-        "model.norm",               # mlx-lm single-wrapped
-        "model.model.norm",         # mlx-lm double-wrapped
-        "norm",                     # direct
-        "ln_f",                     # GPT-2 style
-        "model.ln_f",               # GPT-2 with model wrapper
-        "transformer.ln_f",         # GPT with transformer wrapper
-        "final_layer_norm",         # Some models
+        "language_model.model.norm",  # nested language_model.model wrapper
+        "language_model.norm",  # language_model wrapper
+        "model.norm",  # mlx-lm single-wrapped
+        "model.model.norm",  # mlx-lm double-wrapped
+        "norm",  # direct
+        "ln_f",  # GPT-2 style
+        "model.ln_f",  # GPT-2 with model wrapper
+        "transformer.ln_f",  # GPT with transformer wrapper
+        "final_layer_norm",  # Some models
     ]
 
     LM_HEAD_PATHS = [
-        "lm_head",                  # Standard location
-        "model.lm_head",            # With model wrapper
-        "model.model.lm_head",      # mlx-lm double-wrapped
-        "output",                   # Some Llama implementations
-        "head",                     # Alternative naming
+        # Some wrapped Gemma-family models expose the vocab projection here,
+        # while others use this name for an internal non-vocab projection.
+        # _is_valid_output_projection() filters out the latter case.
+        "language_model.model.per_layer_model_projection",  # nested language_model.model wrapper
+        "language_model.model.lm_head",  # language_model nested lm head
+        "language_model.lm_head",  # language_model wrapper
+        "lm_head",  # Standard location
+        "model.lm_head",  # With model wrapper
+        "model.model.lm_head",  # mlx-lm double-wrapped
+        "output",  # Some Llama implementations
+        "head",  # Alternative naming
     ]
 
     def __init__(
@@ -81,9 +122,9 @@ class ModuleResolver:
         self._lm_head_path = lm_head_path
 
         # Cache resolved modules
-        self._embedding_cache: Optional[Tuple[Any, str]] = None
-        self._norm_cache: Optional[Tuple[Any, str]] = None
-        self._lm_head_cache: Optional[Tuple[Any, str, bool]] = None
+        self._embedding_cache: Optional[Tuple[Any, Optional[str]]] = None
+        self._norm_cache: Optional[Tuple[Any, Optional[str]]] = None
+        self._lm_head_cache: Optional[Tuple[Any, Optional[str], bool]] = None
 
     def _resolve_path(self, path: str) -> Optional[Any]:
         """
@@ -97,7 +138,7 @@ class ModuleResolver:
         """
         try:
             obj = self.model
-            for part in path.split('.'):
+            for part in path.split("."):
                 obj = getattr(obj, part)
             return obj
         except AttributeError:
@@ -127,7 +168,8 @@ class ModuleResolver:
                 return module, override_path
             warnings.warn(
                 f"Override path '{override_path}' for {component_name} not found. "
-                f"Falling back to automatic resolution."
+                f"Falling back to automatic resolution.",
+                stacklevel=2,
             )
 
         # Try fallback chain
@@ -137,6 +179,27 @@ class ModuleResolver:
                 return module, path
 
         return None, None
+
+    def _is_valid_output_projection(self, module: Any) -> bool:
+        """
+        Check whether a candidate module looks like a vocab projection.
+
+        If we can compare against the token embedding shape, require the output
+        dimension to match the embedding vocab size. This filters out internal
+        projection layers such as Gemma 4's ``per_layer_model_projection`` while
+        still allowing genuine wrapped lm heads.
+        """
+        if not hasattr(module, "weight") or not hasattr(module.weight, "shape"):
+            return True
+
+        embedding = self.get_embedding_layer()
+        embedding_weight = getattr(embedding, "weight", None) if embedding is not None else None
+        embedding_has_shape = hasattr(embedding_weight, "shape")
+        if not embedding_has_shape:
+            return True
+
+        assert embedding_weight is not None
+        return bool(module.weight.shape[0] == embedding_weight.shape[0])
 
     def get_embedding_layer(self) -> Optional[nn.Module]:
         """
@@ -148,11 +211,7 @@ class ModuleResolver:
         if self._embedding_cache is not None:
             return self._embedding_cache[0]
 
-        module, path = self._find_module(
-            self._embedding_path,
-            self.EMBEDDING_PATHS,
-            "embedding"
-        )
+        module, path = self._find_module(self._embedding_path, self.EMBEDDING_PATHS, "embedding")
 
         if module is not None:
             self._embedding_cache = (module, path)
@@ -175,11 +234,7 @@ class ModuleResolver:
         if self._norm_cache is not None:
             return self._norm_cache[0]
 
-        module, path = self._find_module(
-            self._norm_path,
-            self.NORM_PATHS,
-            "final_norm"
-        )
+        module, path = self._find_module(self._norm_path, self.NORM_PATHS, "final_norm")
 
         if module is not None:
             self._norm_cache = (module, path)
@@ -222,15 +277,33 @@ class ModuleResolver:
             return self._lm_head_cache
 
         # First try to find explicit lm_head
-        module, path = self._find_module(
-            self._lm_head_path,
-            self.LM_HEAD_PATHS,
-            "lm_head"
+        paths_to_try = (
+            [self._lm_head_path] if self._lm_head_path is not None else self.LM_HEAD_PATHS
         )
+        if self._lm_head_path is not None:
+            paths_to_try = paths_to_try + [
+                path for path in self.LM_HEAD_PATHS if path != self._lm_head_path
+            ]
 
-        if module is not None:
-            self._lm_head_cache = (module, path, False)
-            return module, path, False
+        for path in paths_to_try:
+            module = self._resolve_path(path)
+            if module is None:
+                if path == self._lm_head_path:
+                    warnings.warn(
+                        f"Override path '{path}' for lm_head not found. "
+                        "Falling back to automatic resolution.",
+                        stacklevel=2,
+                    )
+                continue
+            if self._is_valid_output_projection(module):
+                self._lm_head_cache = (module, path, False)
+                return module, path, False
+            if path == self._lm_head_path:
+                warnings.warn(
+                    f"Override path '{path}' for lm_head does not look like a vocab projection. "
+                    "Falling back to automatic resolution.",
+                    stacklevel=2,
+                )
 
         # Fall back to weight-tied embedding
         embedding = self.get_embedding_layer()
@@ -283,20 +356,18 @@ def normalize_layer_key(key: str) -> str:
     Example:
         >>> normalize_layer_key("model.model.layers.0.self_attn")
         'layers.0.self_attn'
+        >>> normalize_layer_key("model.language_model.model.layers.0.mlp")
+        'layers.0.mlp'
         >>> normalize_layer_key("model.layers.0.mlp")
         'layers.0.mlp'
         >>> normalize_layer_key("layers.0")
         'layers.0'
     """
-    if key.startswith("model.model."):
-        return key[12:]
-    if key.startswith("model."):
-        return key[6:]
-    return key
+    return _canonicalize_module_name(key)
 
 
 def find_layer_key_pattern(
-    activations: dict,
+    activations: Dict[str, Any],
     layer_idx: int,
     component: Optional[str] = None,
 ) -> Optional[str]:
@@ -326,12 +397,12 @@ def find_layer_key_pattern(
     patterns = [
         # Llama/Mistral style
         f"model.model.layers.{layer_idx}{suffix}",  # mlx-lm double-wrapped
-        f"model.layers.{layer_idx}{suffix}",        # mlx-lm single-wrapped
-        f"layers.{layer_idx}{suffix}",              # direct
+        f"model.layers.{layer_idx}{suffix}",  # mlx-lm single-wrapped
+        f"layers.{layer_idx}{suffix}",  # direct
         # GPT-2 style
-        f"model.model.h.{layer_idx}{suffix}",       # GPT-2 double-wrapped
-        f"model.h.{layer_idx}{suffix}",             # GPT-2 single-wrapped
-        f"h.{layer_idx}{suffix}",                   # GPT-2 direct
+        f"model.model.h.{layer_idx}{suffix}",  # GPT-2 double-wrapped
+        f"model.h.{layer_idx}{suffix}",  # GPT-2 single-wrapped
+        f"h.{layer_idx}{suffix}",  # GPT-2 direct
     ]
 
     for pattern in patterns:
@@ -342,7 +413,7 @@ def find_layer_key_pattern(
     # This handles deeply nested wrappers (model.model.model.layers.0, etc.)
     target_suffixes = [
         f"layers.{layer_idx}{suffix}",  # Llama-style
-        f"h.{layer_idx}{suffix}",       # GPT-2 style
+        f"h.{layer_idx}{suffix}",  # GPT-2 style
     ]
 
     for key in activations:

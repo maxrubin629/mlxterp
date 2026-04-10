@@ -10,6 +10,8 @@ This module provides analysis-related methods as a mixin class, including:
 import mlx.core as mx
 from typing import Optional, Dict, List, Union, Any
 
+from .core.activation import get_primary_tensor
+
 
 class AnalysisMixin:
     """
@@ -81,8 +83,11 @@ class AnalysisMixin:
             batch_results = []
             for i in range(hidden_state.shape[0]):
                 single_result = self.get_token_predictions(
-                    hidden_state[i], top_k=top_k, return_scores=return_scores,
-                    embedding_layer=embedding_layer, lm_head=lm_head
+                    hidden_state[i],
+                    top_k=top_k,
+                    return_scores=return_scores,
+                    embedding_layer=embedding_layer,
+                    lm_head=lm_head,
                 )
                 batch_results.append(single_result)
             return batch_results
@@ -156,8 +161,11 @@ class AnalysisMixin:
             Logits tensor, shape (vocab_size,)
         """
         # Check if it's a quantized embedding by looking for quantization attributes
-        is_quantized = hasattr(embed_layer, 'scales') or hasattr(embed_layer, 'biases') or \
-                      (hasattr(embed_layer, 'weight') and embed_layer.weight.shape[0] != self.vocab_size)
+        is_quantized = (
+            hasattr(embed_layer, "scales")
+            or hasattr(embed_layer, "biases")
+            or (hasattr(embed_layer, "weight") and embed_layer.weight.shape[0] != self.vocab_size)
+        )
 
         if is_quantized:
             # Quantized embedding - compute similarities in batches
@@ -193,7 +201,7 @@ class AnalysisMixin:
         plot: bool = False,
         max_display_tokens: int = 15,
         figsize: tuple = (16, 10),
-        cmap: str = 'viridis',
+        cmap: str = "viridis",
         font_family: Optional[str] = None,
         final_norm: Optional[Any] = None,
         skip_norm: bool = False,
@@ -285,7 +293,9 @@ class AnalysisMixin:
             if layer_key is None:
                 continue
 
-            layer_output = trace.activations[layer_key]  # Shape: (batch, seq_len, hidden_dim)
+            layer_output = get_primary_tensor(
+                trace.activations[layer_key]
+            )  # Shape: (batch, seq_len, hidden_dim)
             if layer_output.ndim != 3:
                 # Skip if not proper shape (might be a different type of activation)
                 continue
@@ -312,7 +322,9 @@ class AnalysisMixin:
                     normalized = hidden
 
                 # Get token predictions
-                predictions = self.get_token_predictions(normalized, top_k=top_k, return_scores=True)
+                predictions = self.get_token_predictions(
+                    normalized, top_k=top_k, return_scores=True
+                )
 
                 # Add token strings
                 predictions_with_str = [
@@ -337,20 +349,32 @@ class AnalysisMixin:
             if font_family is None:
                 # Auto-detect: try common CJK fonts
                 import platform
-                system = platform.system()
-                if system == 'Darwin':  # macOS
-                    plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'Heiti TC', 'PingFang SC', 'DejaVu Sans']
-                elif system == 'Windows':
-                    plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'DejaVu Sans']
-                else:  # Linux
-                    plt.rcParams['font.sans-serif'] = ['Noto Sans CJK SC', 'WenQuanYi Micro Hei', 'DejaVu Sans']
-            else:
-                plt.rcParams['font.sans-serif'] = [font_family, 'DejaVu Sans']
 
-            plt.rcParams['axes.unicode_minus'] = False
+                system = platform.system()
+                if system == "Darwin":  # macOS
+                    plt.rcParams["font.sans-serif"] = [
+                        "Arial Unicode MS",
+                        "Heiti TC",
+                        "PingFang SC",
+                        "DejaVu Sans",
+                    ]
+                elif system == "Windows":
+                    plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+                else:  # Linux
+                    plt.rcParams["font.sans-serif"] = [
+                        "Noto Sans CJK SC",
+                        "WenQuanYi Micro Hei",
+                        "DejaVu Sans",
+                    ]
+            else:
+                plt.rcParams["font.sans-serif"] = [font_family, "DejaVu Sans"]
+
+            plt.rcParams["axes.unicode_minus"] = False
 
             # Suppress font warnings for missing glyphs
-            warnings.filterwarnings('ignore', category=UserWarning, message='.*Glyph.*missing from font.*')
+            warnings.filterwarnings(
+                "ignore", category=UserWarning, message=".*Glyph.*missing from font.*"
+            )
 
             # Prepare data for heatmap
             layer_indices = sorted(results.keys())
@@ -391,18 +415,17 @@ class AnalysisMixin:
             token_to_idx = {token: idx for idx, token in enumerate(all_tokens)}
 
             # Convert predictions matrix to integer indices
-            numeric_matrix = np.array([
-                [token_to_idx[token] for token in row]
-                for row in predictions_matrix
-            ])
+            numeric_matrix = np.array(
+                [[token_to_idx[token] for token in row] for row in predictions_matrix]
+            )
 
             # Create heatmap
-            im = ax.imshow(numeric_matrix, cmap=cmap, aspect='auto', interpolation='nearest')
+            im = ax.imshow(numeric_matrix, cmap=cmap, aspect="auto", interpolation="nearest")
 
             # Set ticks and labels
             ax.set_xticks(np.arange(display_seq_len))
             ax.set_yticks(np.arange(len(layer_indices)))
-            ax.set_xticklabels(input_token_labels, rotation=45, ha='right', fontsize=9)
+            ax.set_xticklabels(input_token_labels, rotation=45, ha="right", fontsize=9)
             ax.set_yticklabels([f"Layer {i}" for i in layer_indices])
 
             # Add text annotations showing the predicted tokens
@@ -411,24 +434,43 @@ class AnalysisMixin:
                     pred_token = predictions_matrix[i][j]
                     # Truncate long tokens for display
                     display_token = pred_token if len(pred_token) <= 10 else pred_token[:8] + ".."
-                    ax.text(j, i, display_token,
-                           ha="center", va="center", color="white",
-                           fontsize=8, weight='bold',
-                           bbox=dict(boxstyle='round,pad=0.3', facecolor='black', alpha=0.3))
+                    ax.text(
+                        j,
+                        i,
+                        display_token,
+                        ha="center",
+                        va="center",
+                        color="white",
+                        fontsize=8,
+                        weight="bold",
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="black", alpha=0.3),
+                    )
 
             # Labels and title
-            ax.set_xlabel("Input Token Position", fontsize=12, weight='bold')
-            ax.set_ylabel("Layer", fontsize=12, weight='bold')
+            ax.set_xlabel("Input Token Position", fontsize=12, weight="bold")
+            ax.set_ylabel("Layer", fontsize=12, weight="bold")
             title_text = text if len(text) <= 60 else f"{text[:60]}..."
-            ax.set_title(f'Token Predictions Across Layers (Logit Lens)\nInput: "{title_text}"',
-                        fontsize=14, pad=20, weight='bold')
+            ax.set_title(
+                f'Token Predictions Across Layers (Logit Lens)\nInput: "{title_text}"',
+                fontsize=14,
+                pad=20,
+                weight="bold",
+            )
 
             # Add a note about the color legend
             colorbar_labels = all_tokens[:20] if len(all_tokens) > 20 else all_tokens
-            legend_text = "Color represents predicted token\nShowing unique tokens across all predictions"
-            ax.text(0.02, -0.15, legend_text, transform=ax.transAxes,
-                   fontsize=9, verticalalignment='top',
-                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+            legend_text = (
+                "Color represents predicted token\nShowing unique tokens across all predictions"
+            )
+            ax.text(
+                0.02,
+                -0.15,
+                legend_text,
+                transform=ax.transAxes,
+                fontsize=9,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            )
 
             plt.tight_layout()
             plt.show()
@@ -445,7 +487,7 @@ class AnalysisMixin:
         plot: bool = False,
         max_display_tokens: int = 15,
         figsize: tuple = (16, 10),
-        cmap: str = 'viridis',
+        cmap: str = "viridis",
         font_family: Optional[str] = None,
         final_norm: Any = None,
         skip_norm: bool = False,
@@ -534,7 +576,9 @@ class AnalysisMixin:
             if layer_key is None:
                 continue
 
-            layer_output = trace.activations[layer_key]  # Shape: (batch, seq_len, hidden_dim)
+            layer_output = get_primary_tensor(
+                trace.activations[layer_key]
+            )  # Shape: (batch, seq_len, hidden_dim)
             if layer_output.ndim != 3:
                 continue
             batch_size, seq_len, hidden_dim = layer_output.shape
@@ -567,7 +611,9 @@ class AnalysisMixin:
                     normalized = translated
 
                 # Get token predictions
-                predictions = self.get_token_predictions(normalized, top_k=top_k, return_scores=True)
+                predictions = self.get_token_predictions(
+                    normalized, top_k=top_k, return_scores=True
+                )
 
                 # Add token strings
                 predictions_with_str = [
@@ -581,8 +627,14 @@ class AnalysisMixin:
         # Generate visualization if requested
         if plot:
             self._plot_logit_lens(
-                results, text, tokens, max_display_tokens, figsize, cmap, font_family,
-                title_prefix="Tuned Lens"
+                results,
+                text,
+                tokens,
+                max_display_tokens,
+                figsize,
+                cmap,
+                font_family,
+                title_prefix="Tuned Lens",
             )
 
         return results
@@ -594,9 +646,9 @@ class AnalysisMixin:
         tokens: List[int],
         max_display_tokens: int = 15,
         figsize: tuple = (16, 10),
-        cmap: str = 'viridis',
+        cmap: str = "viridis",
         font_family: Optional[str] = None,
-        title_prefix: str = "Logit Lens"
+        title_prefix: str = "Logit Lens",
     ) -> None:
         """
         Internal method to plot logit lens or tuned lens results.
@@ -620,13 +672,14 @@ class AnalysisMixin:
 
         # Set up font for potential CJK characters
         if font_family:
-            rcParams['font.family'] = font_family
+            rcParams["font.family"] = font_family
         else:
             import platform
-            if platform.system() == 'Darwin':
-                rcParams['font.family'] = ['Arial Unicode MS', 'sans-serif']
+
+            if platform.system() == "Darwin":
+                rcParams["font.family"] = ["Arial Unicode MS", "sans-serif"]
             else:
-                rcParams['font.family'] = ['DejaVu Sans', 'sans-serif']
+                rcParams["font.family"] = ["DejaVu Sans", "sans-serif"]
 
         # Get input tokens for display
         input_tokens_str = [self.token_to_str(t) for t in tokens]
@@ -681,8 +734,9 @@ class AnalysisMixin:
 
         # Create heatmap
         import numpy as np
+
         color_array = np.array(color_matrix)
-        im = ax.imshow(color_array, cmap=cmap, aspect='auto')
+        im = ax.imshow(color_array, cmap=cmap, aspect="auto")
 
         # Set ticks
         ax.set_xticks(range(num_positions))
@@ -693,7 +747,7 @@ class AnalysisMixin:
         for i, t in enumerate(input_tokens_str):
             display_t = repr(t)[1:-1] if len(t) <= 10 else repr(t[:10])[1:-1] + "..."
             x_labels.append(f"{display_t}")
-        ax.set_xticklabels(x_labels, rotation=45, ha='right', fontsize=9)
+        ax.set_xticklabels(x_labels, rotation=45, ha="right", fontsize=9)
         ax.set_yticklabels([f"L{i}" for i in layer_indices], fontsize=9)
 
         # Add text annotations
@@ -702,20 +756,40 @@ class AnalysisMixin:
                 pred_token = predictions_matrix[i][j]
                 display_pred = pred_token[:8] if len(pred_token) > 8 else pred_token
                 display_pred = repr(display_pred)[1:-1]
-                text_color = 'white' if color_array[i, j] > len(all_tokens) / 2 else 'black'
-                ax.text(j, i, display_pred, ha='center', va='center',
-                       fontsize=7, color=text_color, weight='bold')
+                text_color = "white" if color_array[i, j] > len(all_tokens) / 2 else "black"
+                ax.text(
+                    j,
+                    i,
+                    display_pred,
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                    color=text_color,
+                    weight="bold",
+                )
 
-        ax.set_xlabel("Input Token Position", fontsize=12, weight='bold')
-        ax.set_ylabel("Layer", fontsize=12, weight='bold')
+        ax.set_xlabel("Input Token Position", fontsize=12, weight="bold")
+        ax.set_ylabel("Layer", fontsize=12, weight="bold")
         title_text = text if len(text) <= 60 else f"{text[:60]}..."
-        ax.set_title(f'Token Predictions Across Layers ({title_prefix})\nInput: "{title_text}"',
-                    fontsize=14, pad=20, weight='bold')
+        ax.set_title(
+            f'Token Predictions Across Layers ({title_prefix})\nInput: "{title_text}"',
+            fontsize=14,
+            pad=20,
+            weight="bold",
+        )
 
-        legend_text = "Color represents predicted token\nShowing unique tokens across all predictions"
-        ax.text(0.02, -0.15, legend_text, transform=ax.transAxes,
-               fontsize=9, verticalalignment='top',
-               bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+        legend_text = (
+            "Color represents predicted token\nShowing unique tokens across all predictions"
+        )
+        ax.text(
+            0.02,
+            -0.15,
+            legend_text,
+            transform=ax.transAxes,
+            fontsize=9,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        )
 
         plt.tight_layout()
         plt.show()
@@ -729,7 +803,7 @@ class AnalysisMixin:
         metric: str = "l2",
         plot: bool = False,
         figsize: tuple = (12, 8),
-        cmap: str = "RdBu_r"
+        cmap: str = "RdBu_r",
     ) -> Dict[int, float]:
         """
         Automated activation patching to find important layers for a task.
@@ -790,6 +864,7 @@ class AnalysisMixin:
 
         # Distance function with numerical stability
         if metric == "l2":
+
             def distance(a, b):
                 """L2 distance with numerical stability for large vocabularies"""
                 diff = a - b
@@ -802,7 +877,9 @@ class AnalysisMixin:
                     mse = mx.mean(diff_f32 * diff_f32)
                     return float(mx.sqrt(mse) * mx.sqrt(float(diff.size)))
                 return float(mx.sqrt(squared_sum))
+
         elif metric == "cosine":
+
             def distance(a, b):
                 """Cosine distance with numerical stability"""
                 # Use float32 for better precision
@@ -818,11 +895,14 @@ class AnalysisMixin:
                 a_normalized = a_f32 / a_norm
                 b_normalized = b_f32 / b_norm
                 return float(1.0 - mx.sum(a_normalized * b_normalized))
+
         elif metric == "mse":
+
             def distance(a, b):
                 """Mean squared error - stable for large vocabularies"""
                 diff = a.astype(mx.float32) - b.astype(mx.float32)
                 return float(mx.mean(diff * diff))
+
         else:
             raise ValueError(f"Unknown metric: {metric}. Use 'l2', 'cosine', or 'mse'")
 
@@ -854,37 +934,41 @@ class AnalysisMixin:
             if component == "output":
                 # "output" means the layer's output, which is stored under the layer name
                 path_patterns = [
-                    f"model.model.layers.{layer_idx}",   # mlx-lm Llama models
-                    f"model.layers.{layer_idx}",         # models with .model wrapper
-                    f"layers.{layer_idx}",               # direct layers
-                    f"model.model.h.{layer_idx}",        # GPT-2 style
-                    f"model.h.{layer_idx}",              # GPT-2 without double model
-                    f"h.{layer_idx}",                    # Direct GPT-2
+                    f"model.model.layers.{layer_idx}",  # mlx-lm Llama models
+                    f"model.layers.{layer_idx}",  # models with .model wrapper
+                    f"layers.{layer_idx}",  # direct layers
+                    f"model.model.h.{layer_idx}",  # GPT-2 style
+                    f"model.h.{layer_idx}",  # GPT-2 without double model
+                    f"h.{layer_idx}",  # Direct GPT-2
                 ]
             elif "." in component:
                 # Full path provided (e.g., "mlp.gate_proj")
                 path_patterns = []
                 for comp in component_variants:
-                    path_patterns.extend([
-                        f"model.model.layers.{layer_idx}.{comp}",  # mlx-lm Llama models
-                        f"model.layers.{layer_idx}.{comp}",        # models with .model wrapper
-                        f"layers.{layer_idx}.{comp}",              # direct layers
-                        f"model.model.h.{layer_idx}.{comp}",       # GPT-2 style
-                        f"model.h.{layer_idx}.{comp}",             # GPT-2 without double model
-                        f"h.{layer_idx}.{comp}",                   # Direct GPT-2
-                    ])
+                    path_patterns.extend(
+                        [
+                            f"model.model.layers.{layer_idx}.{comp}",  # mlx-lm Llama models
+                            f"model.layers.{layer_idx}.{comp}",  # models with .model wrapper
+                            f"layers.{layer_idx}.{comp}",  # direct layers
+                            f"model.model.h.{layer_idx}.{comp}",  # GPT-2 style
+                            f"model.h.{layer_idx}.{comp}",  # GPT-2 without double model
+                            f"h.{layer_idx}.{comp}",  # Direct GPT-2
+                        ]
+                    )
             else:
                 # Simple component name (e.g., "mlp", "self_attn", "attn")
                 path_patterns = []
                 for comp in component_variants:
-                    path_patterns.extend([
-                        f"model.model.layers.{layer_idx}.{comp}",  # mlx-lm Llama models
-                        f"model.layers.{layer_idx}.{comp}",        # models with .model wrapper
-                        f"layers.{layer_idx}.{comp}",              # direct layers
-                        f"model.model.h.{layer_idx}.{comp}",       # GPT-2 style
-                        f"model.h.{layer_idx}.{comp}",             # GPT-2 without double model
-                        f"h.{layer_idx}.{comp}",                   # Direct GPT-2
-                    ])
+                    path_patterns.extend(
+                        [
+                            f"model.model.layers.{layer_idx}.{comp}",  # mlx-lm Llama models
+                            f"model.layers.{layer_idx}.{comp}",  # models with .model wrapper
+                            f"layers.{layer_idx}.{comp}",  # direct layers
+                            f"model.model.h.{layer_idx}.{comp}",  # GPT-2 style
+                            f"model.h.{layer_idx}.{comp}",  # GPT-2 without double model
+                            f"h.{layer_idx}.{comp}",  # Direct GPT-2
+                        ]
+                    )
 
             # Get clean activation - find which path works
             activation_key = None
@@ -896,7 +980,9 @@ class AnalysisMixin:
                         break
 
                 if activation_key is None:
-                    print(f"\nWarning: No activation found for layer {layer_idx}.{component}, skipping")
+                    print(
+                        f"\nWarning: No activation found for layer {layer_idx}.{component}, skipping"
+                    )
                     print(f"  Tried: {path_patterns[:3]}")
                     continue
 
@@ -907,13 +993,14 @@ class AnalysisMixin:
             if activation_key.startswith("model.model."):
                 intervention_key = activation_key[12:]  # Remove "model.model."
             elif activation_key.startswith("model."):
-                intervention_key = activation_key[6:]   # Remove "model."
+                intervention_key = activation_key[6:]  # Remove "model."
             else:
                 intervention_key = activation_key
 
             # Patch into corrupted
-            with self.trace(corrupted_text,
-                           interventions={intervention_key: iv.replace_with(clean_activation)}):
+            with self.trace(
+                corrupted_text, interventions={intervention_key: iv.replace_with(clean_activation)}
+            ):
                 patched_output = self.output.save()
 
             mx.eval(patched_output)
@@ -946,42 +1033,51 @@ class AnalysisMixin:
             fig, ax = plt.subplots(figsize=figsize)
 
             # Create bar plot
-            colors = ['#2166ac' if r > 0 else '#b2182b' for r in recoveries]
-            bars = ax.bar(layer_indices, recoveries, color=colors, alpha=0.7, edgecolor='black')
+            colors = ["#2166ac" if r > 0 else "#b2182b" for r in recoveries]
+            bars = ax.bar(layer_indices, recoveries, color=colors, alpha=0.7, edgecolor="black")
 
             # Add horizontal line at 0
-            ax.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
+            ax.axhline(y=0, color="black", linestyle="-", linewidth=0.8)
 
             # Labels and title
-            ax.set_xlabel("Layer", fontsize=12, weight='bold')
-            ax.set_ylabel("Recovery (%)", fontsize=12, weight='bold')
+            ax.set_xlabel("Layer", fontsize=12, weight="bold")
+            ax.set_ylabel("Recovery (%)", fontsize=12, weight="bold")
             clean_short = clean_text if len(clean_text) <= 40 else f"{clean_text[:40]}..."
-            corrupted_short = corrupted_text if len(corrupted_text) <= 40 else f"{corrupted_text[:40]}..."
+            corrupted_short = (
+                corrupted_text if len(corrupted_text) <= 40 else f"{corrupted_text[:40]}..."
+            )
             ax.set_title(
-                f'Activation Patching: {component.upper()}\n'
+                f"Activation Patching: {component.upper()}\n"
                 f'Clean: "{clean_short}"\n'
                 f'Corrupted: "{corrupted_short}"',
-                fontsize=12, pad=20, weight='bold'
+                fontsize=12,
+                pad=20,
+                weight="bold",
             )
 
             # Add value labels on bars
             for i, (layer_idx, recovery) in enumerate(zip(layer_indices, recoveries)):
                 height = recovery
-                ax.text(layer_idx, height + (3 if height > 0 else -3),
-                       f'{recovery:.1f}%',
-                       ha='center', va='bottom' if height > 0 else 'top',
-                       fontsize=8)
+                ax.text(
+                    layer_idx,
+                    height + (3 if height > 0 else -3),
+                    f"{recovery:.1f}%",
+                    ha="center",
+                    va="bottom" if height > 0 else "top",
+                    fontsize=8,
+                )
 
             # Add legend
             from matplotlib.patches import Patch
+
             legend_elements = [
-                Patch(facecolor='#2166ac', alpha=0.7, label='Positive (important)'),
-                Patch(facecolor='#b2182b', alpha=0.7, label='Negative (encodes corruption)')
+                Patch(facecolor="#2166ac", alpha=0.7, label="Positive (important)"),
+                Patch(facecolor="#b2182b", alpha=0.7, label="Negative (encodes corruption)"),
             ]
-            ax.legend(handles=legend_elements, loc='best')
+            ax.legend(handles=legend_elements, loc="best")
 
             # Grid
-            ax.grid(axis='y', alpha=0.3, linestyle='--')
+            ax.grid(axis="y", alpha=0.3, linestyle="--")
             ax.set_axisbelow(True)
 
             plt.tight_layout()

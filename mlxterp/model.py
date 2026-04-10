@@ -4,14 +4,16 @@ Main InterpretableModel class - entry point for mlxterp.
 Provides a clean, intuitive API for mechanistic interpretability on MLX models.
 """
 
+from collections import deque
+from typing import Any, Callable, Dict, List, Optional, Union
+
 import mlx.core as mx
 import mlx.nn as nn
-from typing import Optional, Dict, Callable, Any, Union, List
 
-from .core import Trace, ModuleProxy, LayerListProxy, ModuleResolver
-from .tokenization import TokenizerMixin
 from .analysis import AnalysisMixin
+from .core import LayerListProxy, ModuleProxy, ModuleResolver, Trace
 from .sae_mixin import SAEMixin
+from .tokenization import TokenizerMixin
 
 
 class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
@@ -119,13 +121,16 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
         # Try mlx_lm
         try:
             from mlx_lm import load
+
             model, tokenizer_obj = load(model_name)
             # Store tokenizer if we loaded one
             if self.tokenizer is None:
                 self.tokenizer = tokenizer_obj
             return model
-        except ImportError as e:
-            errors.append("mlx-lm not installed. Install with: uv add mlx-lm (or pip install mlx-lm)")
+        except ImportError:
+            errors.append(
+                "mlx-lm not installed. Install with: uv add mlx-lm (or pip install mlx-lm)"
+            )
         except Exception as e:
             errors.append(f"mlx-lm failed to load model: {str(e)}")
 
@@ -138,7 +143,9 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
         error_msg += "Tried the following strategies:\n"
         for i, err in enumerate(errors, 1):
             error_msg += f"  {i}. {err}\n"
-        error_msg += "\nAlternatively, load the model manually and pass it to InterpretableModel(model)."
+        error_msg += (
+            "\nAlternatively, load the model manually and pass it to InterpretableModel(model)."
+        )
 
         raise ValueError(error_msg)
 
@@ -146,8 +153,9 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
         """Try to load a tokenizer for the model"""
         try:
             from transformers import AutoTokenizer
+
             return AutoTokenizer.from_pretrained(model_name)
-        except:
+        except Exception:
             return None
 
     def _setup_layer_access(self):
@@ -156,11 +164,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
 
         Detects the layer structure and creates a LayerListProxy.
         """
-        # Try to find layers, checking multiple possible paths
-        layer_paths = [
-            self._layer_attr,  # Direct attribute (e.g., "layers")
-            f"model.{self._layer_attr}",  # Nested (e.g., "model.layers" for mlx-lm models)
-        ]
+        layer_paths, attempted_paths = self._find_layer_paths()
 
         layers = None
         actual_path = None
@@ -168,7 +172,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
         for path in layer_paths:
             try:
                 obj = self.model
-                parts = path.split('.')
+                parts = path.split(".")
                 for part in parts:
                     obj = getattr(obj, part)
                 layers = obj
@@ -179,7 +183,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
 
         if layers is None:
             raise AttributeError(
-                f"Could not find layers attribute. Tried: {layer_paths}. "
+                f"Could not find layers attribute. Tried: {attempted_paths}. "
                 f"Specify the correct path with layer_attr parameter."
             )
 
@@ -189,9 +193,9 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
                 list(layers),
                 base_name=self._layer_attr,
                 model_ref=self.model,
-                attr_path=actual_path
+                attr_path=actual_path,
             )
-        elif hasattr(layers, '__getitem__'):
+        elif hasattr(layers, "__getitem__"):
             # It's something with __getitem__ (like nn.Sequential)
             # Convert to list
             layer_list = []
@@ -204,15 +208,51 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
                     break
 
             self.layers = LayerListProxy(
-                layer_list,
-                base_name=self._layer_attr,
-                model_ref=self.model,
-                attr_path=actual_path
+                layer_list, base_name=self._layer_attr, model_ref=self.model, attr_path=actual_path
             )
         else:
-            raise AttributeError(
-                f"Model's '{self._layer_attr}' attribute is not iterable"
-            )
+            raise AttributeError(f"Model's '{self._layer_attr}' attribute is not iterable")
+
+    def _find_layer_paths(self) -> tuple[List[str], List[str]]:
+        """
+        Find candidate dotted paths to the model's layer container.
+
+        Walk through common wrapper attributes so nested layouts like
+        ``language_model.model.layers`` and ``language_model.model.h`` resolve
+        for both default and custom ``layer_attr`` values.
+        """
+        wrapper_attrs = ("model", "language_model", "transformer", "backbone", "base_model")
+        queue = deque([("", self.model)])
+        visited = {id(self.model)}
+        layer_paths: List[str] = []
+        attempted_paths: List[str] = []
+
+        while queue:
+            prefix, obj = queue.popleft()
+            attempted_paths.append(f"{prefix}.{self._layer_attr}" if prefix else self._layer_attr)
+
+            try:
+                getattr(obj, self._layer_attr)
+                layer_paths.append(f"{prefix}.{self._layer_attr}" if prefix else self._layer_attr)
+            except Exception:
+                pass
+
+            for wrapper_attr in wrapper_attrs:
+                try:
+                    child = getattr(obj, wrapper_attr)
+                except Exception:
+                    continue
+
+                child_id = id(child)
+                if child is None or child_id in visited:
+                    continue
+
+                visited.add(child_id)
+                child_prefix = f"{prefix}.{wrapper_attr}" if prefix else wrapper_attr
+                queue.append((child_prefix, child))
+
+        # Preserve discovery order while removing duplicates.
+        return list(dict.fromkeys(layer_paths)), list(dict.fromkeys(attempted_paths))
 
     def trace(
         self,
@@ -249,7 +289,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
             interpretable_model=self,
         )
 
-    def _forward(self, inputs: mx.array) -> mx.array:
+    def _forward(self, inputs: mx.array) -> Any:
         """
         Execute the model forward pass.
 
@@ -276,7 +316,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
             for name, module in model.named_modules():
                 print(name, type(module))
         """
-        if hasattr(self.model, 'named_modules'):
+        if hasattr(self.model, "named_modules"):
             return self.model.named_modules()
         else:
             # Fallback: just yield the model itself
@@ -288,7 +328,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
 
     def trainable_parameters(self):
         """Get trainable parameters (delegates to wrapped model)"""
-        if hasattr(self.model, 'trainable_parameters'):
+        if hasattr(self.model, "trainable_parameters"):
             return self.model.trainable_parameters()
         return self.parameters()
 
@@ -304,6 +344,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
                 output = model.output.save()
         """
         from .core import OutputProxy, TraceContext
+
         # Get the current trace context and return its output
         ctx = TraceContext.current()
         if ctx and "__model_output__" in ctx.activations:
@@ -367,6 +408,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
             https://arxiv.org/abs/2303.08112
         """
         from .tuned_lens import train_tuned_lens
+
         return train_tuned_lens(
             self,
             dataset=dataset,
@@ -396,12 +438,13 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
             >>> results = model.tuned_lens("Hello world", tuned_lens)
         """
         from .tuned_lens import TunedLens
+
         return TunedLens.load(path)
 
     def __repr__(self):
         """String representation of the model"""
         model_type = type(self.model).__name__
-        num_layers = len(self.layers) if hasattr(self, 'layers') else 'unknown'
+        num_layers = len(self.layers) if hasattr(self, "layers") else "unknown"
         has_tokenizer = self.tokenizer is not None
         return (
             f"InterpretableModel(\n"

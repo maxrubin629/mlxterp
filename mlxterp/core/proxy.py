@@ -10,10 +10,26 @@ Key classes:
     - LayerListProxy: Provides indexed access to layers
 """
 
-import mlx.core as mx
+from __future__ import annotations
+
+from typing import Any, Callable, Dict, Optional
+
 import mlx.nn as nn
-from typing import Any, Dict, Optional, Callable
-from weakref import ref
+
+from .module_resolver import _canonicalize_module_name
+
+
+def _find_matching_name(values: Dict[str, Any], target: str) -> Optional[str]:
+    """Find an exact or canonicalized name match in a mapping."""
+    if target in values:
+        return target
+
+    canonical_target = _canonicalize_module_name(target)
+    for name in values:
+        if _canonicalize_module_name(name) == canonical_target:
+            return name
+
+    return None
 
 
 class TraceContext:
@@ -22,15 +38,16 @@ class TraceContext:
 
     Uses a stack to support nested traces (though typically only one active).
     """
-    _stack = []
+
+    _stack: list["TraceContext"] = []
 
     @classmethod
-    def current(cls) -> Optional['TraceContext']:
+    def current(cls) -> Optional["TraceContext"]:
         """Get the currently active trace context"""
         return cls._stack[-1] if cls._stack else None
 
     @classmethod
-    def push(cls, ctx: 'TraceContext'):
+    def push(cls, ctx: "TraceContext"):
         """Push a new context onto the stack"""
         cls._stack.append(ctx)
 
@@ -41,56 +58,23 @@ class TraceContext:
             cls._stack.pop()
 
     def __init__(self):
-        self.activations: Dict[str, mx.array] = {}
+        self.activations: Dict[str, Any] = {}
         self.interventions: Dict[str, Callable] = {}
-        self.saved_values: Dict[str, mx.array] = {}
+        self.saved_values: Dict[str, Any] = {}
 
-    def save(self, name: str, value: mx.array):
+    def save(self, name: str, value: Any):
         """Save a value for later retrieval"""
         self.saved_values[name] = value
 
     def should_intervene(self, name: str) -> bool:
         """Check if an intervention is registered for this module"""
-        # Try multiple naming schemes to match user-provided names
-        # E.g., user might specify "layers.5" but internal name is "model.model.layers.5"
+        return _find_matching_name(self.interventions, name) is not None
 
-        # 1. Exact match
-        if name in self.interventions:
-            return True
-
-        # 2. Try removing "model." prefix
-        if name.startswith("model."):
-            short_name = name[6:]  # Remove "model."
-            if short_name in self.interventions:
-                return True
-
-        # 3. Try removing "model.model." prefix (for mlx-lm models)
-        if name.startswith("model.model."):
-            short_name = name[12:]  # Remove "model.model."
-            if short_name in self.interventions:
-                return True
-
-        return False
-
-    def apply_intervention(self, name: str, value: mx.array) -> mx.array:
+    def apply_intervention(self, name: str, value: Any) -> Any:
         """Apply the intervention function to the value"""
-        # Try multiple naming schemes (same as should_intervene)
-
-        # 1. Exact match
-        if name in self.interventions:
-            return self.interventions[name](value)
-
-        # 2. Try removing "model." prefix
-        if name.startswith("model."):
-            short_name = name[6:]
-            if short_name in self.interventions:
-                return self.interventions[short_name](value)
-
-        # 3. Try removing "model.model." prefix
-        if name.startswith("model.model."):
-            short_name = name[12:]
-            if short_name in self.interventions:
-                return self.interventions[short_name](value)
+        matched_name = _find_matching_name(self.interventions, name)
+        if matched_name is not None:
+            return self.interventions[matched_name](value)
 
         return value
 
@@ -143,9 +127,9 @@ class ModuleProxy:
 
     def __init__(self, module: nn.Module, name: str):
         # Use object.__setattr__ to avoid recursion
-        object.__setattr__(self, '_module', module)
-        object.__setattr__(self, '_name', name)
-        object.__setattr__(self, '_subproxies', {})
+        object.__setattr__(self, "_module", module)
+        object.__setattr__(self, "_name", name)
+        object.__setattr__(self, "_subproxies", {})
 
     @property
     def output(self) -> OutputProxy:
@@ -156,20 +140,9 @@ class ModuleProxy:
         """
         ctx = TraceContext.current()
         if ctx:
-            # Try multiple naming schemes to find the activation
-            # 1. Exact name (e.g., "layers.5")
-            if self._name in ctx.activations:
-                return OutputProxy(ctx.activations[self._name], f"{self._name}.output")
-
-            # 2. With "model." prefix (e.g., "model.layers.5")
-            model_prefixed = f"model.{self._name}"
-            if model_prefixed in ctx.activations:
-                return OutputProxy(ctx.activations[model_prefixed], f"{self._name}.output")
-
-            # 3. With "model.model." prefix for mlx-lm models (e.g., "model.model.layers.5")
-            double_prefixed = f"model.model.{self._name}"
-            if double_prefixed in ctx.activations:
-                return OutputProxy(ctx.activations[double_prefixed], f"{self._name}.output")
+            matched_name = _find_matching_name(ctx.activations, self._name)
+            if matched_name is not None:
+                return OutputProxy(ctx.activations[matched_name], f"{self._name}.output")
 
         # If no context or no activation, return a proxy for the name
         return OutputProxy(None, f"{self._name}.output")
@@ -199,21 +172,21 @@ class ModuleProxy:
 
         This enables: model.layers[0].attn
         """
-        if name.startswith('_'):
+        if name.startswith("_"):
             # Avoid infinite recursion for private attributes
             return object.__getattribute__(self, name)
 
         # Get the actual module
-        module = object.__getattribute__(self, '_module')
-        module_name = object.__getattribute__(self, '_name')
-        subproxies = object.__getattribute__(self, '_subproxies')
+        module = object.__getattribute__(self, "_module")
+        module_name = object.__getattribute__(self, "_name")
+        subproxies = object.__getattribute__(self, "_subproxies")
 
         # Check if it's a submodule
         if hasattr(module, name):
             attr = getattr(module, name)
 
             # Check if it's a SimpleWrapper (from tracing)
-            if hasattr(attr, '_wrapped_layer') and hasattr(attr, '_layer_name'):
+            if hasattr(attr, "_wrapped_layer") and hasattr(attr, "_layer_name"):
                 # It's a SimpleWrapper, wrap it with ModuleProxy
                 if name not in subproxies:
                     subproxies[name] = ModuleProxy(attr, f"{module_name}.{name}")
@@ -237,12 +210,12 @@ class ModuleProxy:
         Example:
             model.layers[3].attn.output = mx.zeros_like(...)
         """
-        if name.startswith('_'):
+        if name.startswith("_"):
             object.__setattr__(self, name, value)
         else:
             # This is used for interventions during trace
             ctx = TraceContext.current()
-            if ctx and name == 'output':
+            if ctx and name == "output":
                 # Setting .output directly is an intervention
                 ctx.interventions[self._name] = lambda x: value
             else:
@@ -261,12 +234,18 @@ class LayerListProxy:
         model.layers[3]  # Returns ModuleProxy for layer 3
     """
 
-    def __init__(self, layers: list, base_name: str = "layers", model_ref=None, attr_path: str = None):
+    def __init__(
+        self,
+        layers: list,
+        base_name: str = "layers",
+        model_ref=None,
+        attr_path: Optional[str] = None,
+    ):
         self._layers = layers
         self._base_name = base_name
         self._model_ref = model_ref  # Reference to the actual model
         self._attr_path = attr_path  # Path to access layers (e.g., "model.layers")
-        self._proxies = {}
+        self._proxies: Dict[str, ModuleProxy] = {}
 
     def __getitem__(self, idx: int) -> ModuleProxy:
         """
@@ -279,7 +258,7 @@ class LayerListProxy:
         if self._model_ref is not None and self._attr_path:
             # Navigate to get the current layer
             current_obj = self._model_ref
-            for attr in self._attr_path.split('.'):
+            for attr in self._attr_path.split("."):
                 current_obj = getattr(current_obj, attr)
             current_layer = current_obj[idx]
         else:

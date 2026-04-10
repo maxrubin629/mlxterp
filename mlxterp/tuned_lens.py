@@ -13,10 +13,12 @@ Reference:
 import mlx.core as mx
 import mlx.nn as nn
 import mlx.utils
-from typing import Optional, List, Dict, Any, Callable
-from pathlib import Path
 import json
 import warnings
+from pathlib import Path
+from typing import Optional, List, Any, Callable, cast
+
+from .core.activation import get_primary_tensor
 
 
 def log_softmax(x: mx.array, axis: int = -1) -> mx.array:
@@ -58,7 +60,8 @@ class TunedLens(nn.Module):
         >>> translated = tuned_lens(hidden_state, layer_idx=10)
         >>>
         >>> # Save and load (creates .npz and .json files)
-        >>> tuned_lens.save("tuned_lens_llama")  # Creates tuned_lens_llama.npz and tuned_lens_llama.json
+        >>> tuned_lens.save("tuned_lens_llama")
+        >>> # Creates tuned_lens_llama.npz and tuned_lens_llama.json
         >>> loaded = TunedLens.load("tuned_lens_llama")
     """
 
@@ -103,31 +106,29 @@ class TunedLens(nn.Module):
             Translated hidden state with same shape as input
         """
         if layer_idx < 0 or layer_idx >= self.num_layers:
-            raise ValueError(
-                f"layer_idx {layer_idx} out of range [0, {self.num_layers})"
-            )
-        return self.translators[layer_idx](h)
+            raise ValueError(f"layer_idx {layer_idx} out of range [0, {self.num_layers})")
+        return cast(mx.array, self.translators[layer_idx](h))
 
-    def save(self, path: str) -> None:
+    def save(self, path: str | Path) -> None:
         """
         Save tuned lens weights and config to a file.
 
         Args:
             path: Path to save the weights (will create .npz and .json files)
         """
-        path = Path(path)
+        save_path = Path(path)
 
         # Save config
         config = {
             "num_layers": self.num_layers,
             "hidden_dim": self.hidden_dim,
         }
-        config_path = path.with_suffix(".json")
+        config_path = save_path.with_suffix(".json")
         with open(config_path, "w") as f:
             json.dump(config, f, indent=2)
 
         # Save weights using mx.savez
-        weights_path = path.with_suffix(".npz")
+        weights_path = save_path.with_suffix(".npz")
         weights = {}
         for i, translator in enumerate(self.translators):
             weights[f"translators_{i}_weight"] = translator.weight
@@ -135,7 +136,7 @@ class TunedLens(nn.Module):
         mx.savez(str(weights_path), **weights)
 
     @classmethod
-    def load(cls, path: str) -> "TunedLens":
+    def load(cls, path: str | Path) -> "TunedLens":
         """
         Load tuned lens from saved files.
 
@@ -145,12 +146,12 @@ class TunedLens(nn.Module):
         Returns:
             Loaded TunedLens instance
         """
-        path = Path(path)
+        load_path = Path(path)
 
         # Load config
-        config_path = path.with_suffix(".json")
+        config_path = load_path.with_suffix(".json")
         with open(config_path, "r") as f:
-            config = json.load(f)
+            config = cast(dict[str, int], json.load(f))
 
         # Create instance
         instance = cls(
@@ -159,8 +160,8 @@ class TunedLens(nn.Module):
         )
 
         # Load weights
-        weights_path = path.with_suffix(".npz")
-        weights = mx.load(str(weights_path))
+        weights_path = load_path.with_suffix(".npz")
+        weights = cast(dict[str, mx.array], mx.load(str(weights_path)))
 
         for i in range(instance.num_layers):
             instance.translators[i].weight = weights[f"translators_{i}_weight"]
@@ -242,9 +243,7 @@ def train_tuned_lens(
 
     # Validate dataset is not empty
     if not dataset:
-        raise ValueError(
-            "Dataset is empty. Provide a non-empty list of text strings for training."
-        )
+        raise ValueError("Dataset is empty. Provide a non-empty list of text strings for training.")
 
     if not any(text.strip() for text in dataset):
         raise ValueError(
@@ -265,7 +264,7 @@ def train_tuned_lens(
         # Get dimension from first layer output
         layer_key = find_layer_key_pattern(trace.activations, 0)
         if layer_key:
-            hidden_dim = trace.activations[layer_key].shape[-1]
+            hidden_dim = get_primary_tensor(trace.activations[layer_key]).shape[-1]
         else:
             raise ValueError("Could not determine hidden dimension from model activations")
     except Exception as e:
@@ -329,7 +328,7 @@ def train_tuned_lens(
             if layer_key is None:
                 continue
 
-            layer_output = layer_activations[layer_key]  # (batch, seq_len, hidden_dim)
+            layer_output = get_primary_tensor(layer_activations[layer_key])
 
             # Apply tuned lens translator
             translated = tuned_lens(layer_output, layer_idx)
@@ -396,30 +395,26 @@ def train_tuned_lens(
         target_logits = None
 
         # Try to get from cached model output first
-        if '__model_output__' in trace.activations:
-            target_logits = trace.activations['__model_output__']
-            # Handle tuple outputs (logits, cache) from some models
-            if isinstance(target_logits, tuple):
-                target_logits = target_logits[0]
+        if "__model_output__" in trace.activations:
+            target_logits = get_primary_tensor(trace.activations["__model_output__"])
 
         # Fallback: compute from last layer hidden state
         if target_logits is None:
             last_layer_key = layer_keys.get(num_layers - 1)
             if last_layer_key and last_layer_key in trace.activations:
-                last_hidden = trace.activations[last_layer_key]
+                last_hidden = get_primary_tensor(trace.activations[last_layer_key])
                 if final_norm is not None:
                     last_hidden = final_norm(last_hidden)
                 if is_weight_tied:
+                    assert embed_weights is not None
                     target_logits = last_hidden @ embed_weights.T
                 else:
                     target_logits = proj_module(last_hidden)
 
         # Last resort: run model directly (slower but reliable)
         if target_logits is None:
-            if hasattr(model.model, '__call__'):
-                target_logits = model.model(input_tokens)
-                if isinstance(target_logits, tuple):
-                    target_logits = target_logits[0]
+            if hasattr(model.model, "__call__"):
+                target_logits = get_primary_tensor(model.model(input_tokens))
             else:
                 raise ValueError("Could not get target logits from trace or model")
 
@@ -427,14 +422,17 @@ def train_tuned_lens(
         target_log_probs = log_softmax(target_logits, axis=-1)
 
         # Compute loss and gradients
-        loss_fn = lambda params: compute_loss(
-            params, trace.activations, target_log_probs, layer_keys
-        )
+        def loss_fn(params):
+            return compute_loss(params, trace.activations, target_log_probs, layer_keys)
+
         loss, grads = mx.value_and_grad(loss_fn)(tuned_lens.parameters())
 
         # Gradient clipping
         flat_grads = mlx.utils.tree_flatten(grads)
-        grad_norm = mx.sqrt(sum(mx.sum(g * g) for _, g in flat_grads))
+        grad_sq_sum = mx.array(0.0)
+        for _, grad in flat_grads:
+            grad_sq_sum = grad_sq_sum + mx.sum(grad * grad)
+        grad_norm = mx.sqrt(grad_sq_sum)
         if grad_norm > gradient_clip:
             scale = gradient_clip / (grad_norm + 1e-6)
             grads = mlx.utils.tree_map(lambda g: g * scale, grads)

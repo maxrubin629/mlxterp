@@ -77,6 +77,7 @@ wandb/
 
 # Temporary files (never commit these)
 test_*.py
+!tests/test_*.py
 debug_*.py
 check_*.py
 *_TEMP.md
