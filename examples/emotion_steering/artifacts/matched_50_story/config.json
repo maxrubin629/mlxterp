@@ -1,0 +1,45 @@
+{
+  "model": "mlx-community/gemma-4-e2b-it-4bit",
+  "emotions": [
+    "happy",
+    "sad",
+    "angry",
+    "anxious",
+    "calm"
+  ],
+  "sampling": {
+    "temperature": 1.0,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": null,
+    "repetition_penalty": null,
+    "presence_penalty": null
+  },
+  "train_topics": [
+    "A few minutes before midnight, the character waits for a phone call that could change where they will live next month.",
+    "On the way home, the character opens an email with the final decision on an application they have cared about for years.",
+    "The character unlocks the apartment door and finds the kitchen light on even though they expected the place to be empty.",
+    "At a community center, the character sees a crowd gathered around a bulletin board where an important list has just been posted.",
+    "The character receives a package containing a notebook that belonged to someone they have not seen since childhood.",
+    "After a long silence, the character spots their sibling waiting alone on a bench outside a hospital.",
+    "A store clerk stops the character near the exit and says there is a problem with the receipt.",
+    "The character pulls into the driveway and notices a strange car parked in front of the house.",
+    "At work, the character is asked to step into a conference room where two managers are already seated.",
+    "The character reaches the train platform just as an announcement changes the destination of the next arrival."
+  ],
+  "eval_topics": [
+    "The character sits in a parked car outside a courthouse while rereading a short text message.",
+    "When the character opens the mailbox, there is a single handwritten envelope with no return address.",
+    "The character hears footsteps in the hallway and then a knock at the door just as dinner is nearly ready.",
+    "At dawn, the character checks an online portal and sees that a long-awaited result is finally available."
+  ],
+  "emotion_guidance": {
+    "happy": "The character should feel light, open, and warmly energized. Show buoyancy, relief, generous interpretations, and a tendency to notice color, possibility, or connection.",
+    "sad": "The character should feel heavy, reduced, and quietly hurting. Show slowed movement, lowered energy, attention to absence or loss, and difficulty taking the next step.",
+    "angry": "The character should feel wronged, obstructed, or disrespected. Show heat, tension, clipped focus, blame, and an urge to confront, correct, or push back.",
+    "anxious": "The character should feel watchful and uncertain. Show rehearsal, scanning, bodily vigilance, imagined mistakes, and a mind that keeps leaping ahead.",
+    "calm": "The character should feel settled, regulated, and steady. Show measured pace, spacious attention, even breathing, and an ability to absorb ambiguity without rushing."
+  },
+  "start_token": 50,
+  "neutral_variance_threshold": 0.5
+}

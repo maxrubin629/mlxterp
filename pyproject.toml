@@ -7,7 +7,7 @@ name = "mlxterp"
 version = "0.1.0"
 description = "Mechanistic interpretability for MLX on Apple Silicon"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "Sigurd Schacht", email = "sigurd.schacht@coairesearch.org"}
@@ -27,7 +27,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -38,6 +37,7 @@ dependencies = [
     "ipykernel>=6.31.0",
     "mlx>=0.0.1",
     "mlx-lm>=0.28.3",
+    "mlx-vlm>=0.6.0",
     "pandas",
     "matplotlib",
     "wandb",

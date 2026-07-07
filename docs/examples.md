@@ -1040,6 +1040,27 @@ mlxterp tries multiple paths to find components:
 | Final Norm | `model.norm`, `model.model.norm`, `norm`, `ln_f`, `model.ln_f` |
 | LM Head | `lm_head`, `model.lm_head`, `output` (falls back to embedding if not found) |
 
+## Steering During Generation
+
+`model.steering()` patches the model so interventions apply to every forward
+pass inside the block — including token-by-token decoding loops:
+
+```python
+from mlxterp import InterpretableModel, interventions as iv
+from mlx_lm.generate import stream_generate
+
+model = InterpretableModel("mlx-community/gemma-4-e2b-it-4bit")
+
+with model.steering({"layers.23": iv.add_vector(steering_vector)}):
+    for response in stream_generate(model.model, model.tokenizer, prompt, max_tokens=100):
+        print(response.text, end="")
+```
+
+The [emotion steering example](https://github.com/coairesearch/mlxterp/tree/main/examples/emotion_steering)
+shows a complete workflow: learning per-emotion steering vectors from
+residual-stream activations, evaluating them on held-out stories, and an
+interactive steered chat CLI.
+
 ## See Also
 
 - [API Reference](API.md) - Complete API documentation

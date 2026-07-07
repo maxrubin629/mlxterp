@@ -5,6 +5,8 @@ Utility functions for collecting and analyzing activations.
 import mlx.core as mx
 from typing import List, Dict, Union, Optional
 
+from ..core.activation import get_primary_tensor
+
 
 def get_activations(
     model,
@@ -51,7 +53,7 @@ def get_activations(
     with model.trace(prompts) as trace:
         for layer_idx in layers:
             # Save the layer output
-            act = model.layers[layer_idx].output.save()
+            model.layers[layer_idx].output.save()
 
     # Extract saved activations
     # Look for activation keys that match the layer pattern
@@ -65,7 +67,8 @@ def get_activations(
                 break
 
         if activation_key is not None:
-            act = trace.activations[activation_key]
+            # Wrapped models may emit tuple outputs; operate on the hidden states
+            act = get_primary_tensor(trace.activations[activation_key])
 
             # Extract positions
             # act shape: (batch, seq_len, hidden_dim)

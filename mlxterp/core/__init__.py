@@ -1,5 +1,6 @@
 """Core components for mlxterp."""
 
+from .activation import get_primary_tensor, is_array_like
 from .proxy import ModuleProxy, OutputProxy, LayerListProxy, TraceContext
 from .trace import Trace
 from .intervention import (
@@ -19,6 +20,9 @@ from .module_resolver import (
 )
 
 __all__ = [
+    # Activation helpers
+    "get_primary_tensor",
+    "is_array_like",
     # Proxy
     "ModuleProxy",
     "OutputProxy",

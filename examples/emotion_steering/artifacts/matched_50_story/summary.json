@@ -1,0 +1,795 @@
+{
+  "model": "mlx-community/gemma-4-e2b-it-4bit",
+  "layer_idx": 23,
+  "num_layers": 35,
+  "start_token": 50,
+  "emotions": [
+    "happy",
+    "sad",
+    "angry",
+    "anxious",
+    "calm"
+  ],
+  "sampling": {
+    "temperature": 1.0,
+    "top_k": 64,
+    "top_p": 0.95,
+    "min_p": null,
+    "repetition_penalty": null,
+    "presence_penalty": null
+  },
+  "dataset_design": {
+    "train_topic_count": 10,
+    "eval_topic_count": 4,
+    "matched_train_stories": 50,
+    "emotion_guidance": {
+      "happy": "The character should feel light, open, and warmly energized. Show buoyancy, relief, generous interpretations, and a tendency to notice color, possibility, or connection.",
+      "sad": "The character should feel heavy, reduced, and quietly hurting. Show slowed movement, lowered energy, attention to absence or loss, and difficulty taking the next step.",
+      "angry": "The character should feel wronged, obstructed, or disrespected. Show heat, tension, clipped focus, blame, and an urge to confront, correct, or push back.",
+      "anxious": "The character should feel watchful and uncertain. Show rehearsal, scanning, bodily vigilance, imagined mistakes, and a mind that keeps leaping ahead.",
+      "calm": "The character should feel settled, regulated, and steady. Show measured pace, spacious attention, even breathing, and an ability to absorb ambiguity without rushing."
+    }
+  },
+  "train_story_count": 50,
+  "eval_story_count": 20,
+  "neutral_text_count": 10,
+  "neutral_pc_count": 4,
+  "heldout_accuracy": 0.35,
+  "heldout_predictions": [
+    {
+      "topic": "The character sits in a parked car outside a courthouse while rereading a short text message.",
+      "target_emotion": "happy",
+      "predicted_emotion": "happy",
+      "scores": {
+        "happy": 1.8833928108215332,
+        "sad": -0.4437940716743469,
+        "angry": -1.323683738708496,
+        "anxious": -0.5329012870788574,
+        "calm": 0.32178154587745667
+      }
+    },
+    {
+      "topic": "When the character opens the mailbox, there is a single handwritten envelope with no return address.",
+      "target_emotion": "happy",
+      "predicted_emotion": "anxious",
+      "scores": {
+        "happy": 0.3742888569831848,
+        "sad": 0.01928774267435074,
+        "angry": 0.7249689102172852,
+        "anxious": 1.2939510345458984,
+        "calm": -2.1059911251068115
+      }
+    },
+    {
+      "topic": "The character hears footsteps in the hallway and then a knock at the door just as dinner is nearly ready.",
+      "target_emotion": "happy",
+      "predicted_emotion": "anxious",
+      "scores": {
+        "happy": 0.4895685315132141,
+        "sad": 0.9821957349777222,
+        "angry": -1.8208277225494385,
+        "anxious": 1.5557246208190918,
+        "calm": -0.5291265249252319
+      }
+    },
+    {
+      "topic": "At dawn, the character checks an online portal and sees that a long-awaited result is finally available.",
+      "target_emotion": "happy",
+      "predicted_emotion": "calm",
+      "scores": {
+        "happy": 0.5859636068344116,
+        "sad": 0.031246356666088104,
+        "angry": -0.3305779695510864,
+        "anxious": -1.5166070461273193,
+        "calm": 0.9125150442123413
+      }
+    },
+    {
+      "topic": "The character sits in a parked car outside a courthouse while rereading a short text message.",
+      "target_emotion": "sad",
+      "predicted_emotion": "anxious",
+      "scores": {
+        "happy": -2.27064847946167,
+        "sad": -0.30202144384384155,
+        "angry": 0.2335447072982788,
+        "anxious": 2.1140847206115723,
+        "calm": 0.5500252842903137
+      }
+    },
+    {
+      "topic": "When the character opens the mailbox, there is a single handwritten envelope with no return address.",
+      "target_emotion": "sad",
+      "predicted_emotion": "sad",
+      "scores": {
+        "happy": -3.589611768722534,
+        "sad": 1.9810668230056763,
+        "angry": 0.3159691393375397,
+        "anxious": 0.6612035036087036,
+        "calm": 1.058332920074463
+      }
+    },
+    {
+      "topic": "The character hears footsteps in the hallway and then a knock at the door just as dinner is nearly ready.",
+      "target_emotion": "sad",
+      "predicted_emotion": "anxious",
+      "scores": {
+        "happy": -2.879216194152832,
+        "sad": 0.4882669448852539,
+        "angry": 0.6779810190200806,
+        "anxious": 1.6187152862548828,
+        "calm": 0.43516862392425537
+      }
+    },
+    {
+      "topic": "At dawn, the character checks an online portal and sees that a long-awaited result is finally available.",
+      "target_emotion": "sad",
+      "predicted_emotion": "calm",
+      "scores": {
+        "happy": 0.46285325288772583,
+        "sad": 1.0853686332702637,
+        "angry": -2.031787633895874,
+        "anxious": -0.6988892555236816,
+        "calm": 1.3497778177261353
+      }
+    },
+    {
+      "topic": "The character sits in a parked car outside a courthouse while rereading a short text message.",
+      "target_emotion": "angry",
+      "predicted_emotion": "angry",
+      "scores": {
+        "happy": -2.057570219039917,
+        "sad": 0.42255735397338867,
+        "angry": 1.9012349843978882,
+        "anxious": -0.4770393669605255,
+        "calm": 0.03195801377296448
+      }
+    },
+    {
+      "topic": "When the character opens the mailbox, there is a single handwritten envelope with no return address.",
+      "target_emotion": "angry",
+      "predicted_emotion": "sad",
+      "scores": {
+        "happy": 1.1742939949035645,
+        "sad": 3.1661782264709473,
+        "angry": -2.2145285606384277,
+        "anxious": -0.5060896277427673,
+        "calm": -0.8995285630226135
+      }
+    },
+    {
+      "topic": "The character hears footsteps in the hallway and then a knock at the door just as dinner is nearly ready.",
+      "target_emotion": "angry",
+      "predicted_emotion": "angry",
+      "scores": {
+        "happy": 1.0508828163146973,
+        "sad": -1.464196801185608,
+        "angry": 1.8772048950195312,
+        "anxious": -0.261798620223999,
+        "calm": -1.6092040538787842
+      }
+    },
+    {
+      "topic": "At dawn, the character checks an online portal and sees that a long-awaited result is finally available.",
+      "target_emotion": "angry",
+      "predicted_emotion": "angry",
+      "scores": {
+        "happy": -1.1934900283813477,
+        "sad": -0.8182503581047058,
+        "angry": 1.42091965675354,
+        "anxious": 0.6261788606643677,
+        "calm": -0.17299607396125793
+      }
+    },
+    {
+      "topic": "The character sits in a parked car outside a courthouse while rereading a short text message.",
+      "target_emotion": "anxious",
+      "predicted_emotion": "angry",
+      "scores": {
+        "happy": -4.478914260864258,
+        "sad": 0.2619130313396454,
+        "angry": 3.720588207244873,
+        "anxious": 0.637747585773468,
+        "calm": -0.2633914053440094
+      }
+    },
+    {
+      "topic": "When the character opens the mailbox, there is a single handwritten envelope with no return address.",
+      "target_emotion": "anxious",
+      "predicted_emotion": "calm",
+      "scores": {
+        "happy": -1.4965944290161133,
+        "sad": 0.6324373483657837,
+        "angry": 0.2531003952026367,
+        "anxious": 0.0219903364777565,
+        "calm": 0.6587575674057007
+      }
+    },
+    {
+      "topic": "The character hears footsteps in the hallway and then a knock at the door just as dinner is nearly ready.",
+      "target_emotion": "anxious",
+      "predicted_emotion": "calm",
+      "scores": {
+        "happy": 0.5216741561889648,
+        "sad": 0.08416669070720673,
+        "angry": -1.3520439863204956,
+        "anxious": -0.5372405052185059,
+        "calm": 1.2439460754394531
+      }
+    },
+    {
+      "topic": "At dawn, the character checks an online portal and sees that a long-awaited result is finally available.",
+      "target_emotion": "anxious",
+      "predicted_emotion": "happy",
+      "scores": {
+        "happy": 2.2485694885253906,
+        "sad": -0.8233567476272583,
+        "angry": -1.5628466606140137,
+        "anxious": -0.09588267654180527,
+        "calm": 0.1825324147939682
+      }
+    },
+    {
+      "topic": "The character sits in a parked car outside a courthouse while rereading a short text message.",
+      "target_emotion": "calm",
+      "predicted_emotion": "angry",
+      "scores": {
+        "happy": -2.6923668384552,
+        "sad": 0.5370388031005859,
+        "angry": 1.96828031539917,
+        "anxious": -1.5904756784439087,
+        "calm": 1.3264362812042236
+      }
+    },
+    {
+      "topic": "When the character opens the mailbox, there is a single handwritten envelope with no return address.",
+      "target_emotion": "calm",
+      "predicted_emotion": "anxious",
+      "scores": {
+        "happy": 0.5608448386192322,
+        "sad": -0.451382577419281,
+        "angry": 0.19101452827453613,
+        "anxious": 1.7530226707458496,
+        "calm": -1.7162063121795654
+      }
+    },
+    {
+      "topic": "The character hears footsteps in the hallway and then a knock at the door just as dinner is nearly ready.",
+      "target_emotion": "calm",
+      "predicted_emotion": "calm",
+      "scores": {
+        "happy": 0.2916228771209717,
+        "sad": -0.1782556027173996,
+        "angry": -2.8168954849243164,
+        "anxious": -0.46649491786956787,
+        "calm": 3.12766170501709
+      }
+    },
+    {
+      "topic": "At dawn, the character checks an online portal and sees that a long-awaited result is finally available.",
+      "target_emotion": "calm",
+      "predicted_emotion": "calm",
+      "scores": {
+        "happy": -0.7147762775421143,
+        "sad": -0.19021505117416382,
+        "angry": -0.7420231103897095,
+        "anxious": 0.7911890745162964,
+        "calm": 0.9945530891418457
+      }
+    }
+  ],
+  "confusion": {
+    "happy": {
+      "happy": 1,
+      "sad": 0,
+      "angry": 0,
+      "anxious": 2,
+      "calm": 1
+    },
+    "sad": {
+      "happy": 0,
+      "sad": 1,
+      "angry": 0,
+      "anxious": 2,
+      "calm": 1
+    },
+    "angry": {
+      "happy": 0,
+      "sad": 1,
+      "angry": 3,
+      "anxious": 0,
+      "calm": 0
+    },
+    "anxious": {
+      "happy": 1,
+      "sad": 0,
+      "angry": 1,
+      "anxious": 0,
+      "calm": 2
+    },
+    "calm": {
+      "happy": 0,
+      "sad": 0,
+      "angry": 1,
+      "anxious": 1,
+      "calm": 2
+    }
+  },
+  "vector_norms": {
+    "happy": 3.2988014221191406,
+    "sad": 2.6810481548309326,
+    "angry": 3.576251745223999,
+    "anxious": 2.6312220096588135,
+    "calm": 3.4585890769958496
+  },
+  "top_tokens": {
+    "happy": {
+      "upweighted": [
+        "that",
+        "that",
+        "!",
+        "!,",
+        "toutefois",
+        "!')",
+        "optimizations",
+        "però"
+      ],
+      "downweighted": [
+        "所谓",
+        "Proposed",
+        "অনেক",
+        "Proposed",
+        "many",
+        "Makes",
+        "Necessary",
+        "いわ"
+      ]
+    },
+    "sad": {
+      "upweighted": [
+        "也不是",
+        "theirs",
+        "也不",
+        "但也",
+        "тоже",
+        "也很",
+        "上也",
+        "ไม่ใช่"
+      ],
+      "downweighted": [
+        "르면",
+        "If",
+        "as",
+        "భాగంగా",
+        "tempted",
+        "quaisquer",
+        "пользу",
+        "되면"
+      ]
+    },
+    "angry": {
+      "upweighted": [
+        "both",
+        "said",
+        "Specifically",
+        "՝",
+        "mselves",
+        "Both",
+        "Said",
+        "told"
+      ],
+      "downweighted": [
+        "another",
+        "again",
+        "still",
+        "也不",
+        "anymore",
+        "또",
+        "也不会",
+        "хороший"
+      ]
+    },
+    "anxious": {
+      "upweighted": [
+        "becomes",
+        "remains",
+        "seems",
+        "conviene",
+        "?”,",
+        "stays",
+        "としては",
+        "merely"
+      ],
+      "downweighted": [
+        "력이",
+        "とその",
+        "ที่มี",
+        "了他的",
+        "及",
+        "}.\\",
+        "].",
+        "his"
+      ]
+    },
+    "calm": {
+      "upweighted": [
+        "سکے۔",
+        "ាន",
+        "конкре",
+        "ื้อ",
+        ".",
+        "einige",
+        "دوره",
+        "ための"
+      ],
+      "downweighted": [
+        "übrigens",
+        "**,",
+        "obstante",
+        "!,",
+        "by",
+        "Preference",
+        ",</",
+        "embraced"
+      ]
+    }
+  },
+  "steering": [
+    {
+      "prompt": "Continue in 2-3 sentences: Mina held the envelope in both hands before sliding a finger under the seal.",
+      "probe_tokens": {
+        "happy": {
+          "token_id": 5293,
+          "token_text": "happy",
+          "token_count": 1
+        },
+        "sad": {
+          "token_id": 11019,
+          "token_text": "sad",
+          "token_count": 1
+        },
+        "angry": {
+          "token_id": 23186,
+          "token_text": "angry",
+          "token_count": 1
+        },
+        "anxious": {
+          "token_id": 34835,
+          "token_text": "anxious",
+          "token_count": 1
+        },
+        "calm": {
+          "token_id": 16680,
+          "token_text": "calm",
+          "token_count": 1
+        }
+      },
+      "baseline_scores": {
+        "happy": -20.875,
+        "sad": -23.25,
+        "angry": -15.6875,
+        "anxious": -10.0,
+        "calm": -13.75
+      },
+      "steered": {
+        "happy": {
+          "steered_scores": {
+            "happy": -21.37198257446289,
+            "sad": -23.938480377197266,
+            "angry": -18.604677200317383,
+            "anxious": -14.884987831115723,
+            "calm": -12.406192779541016
+          },
+          "delta_vs_baseline": {
+            "happy": -0.4969825744628906,
+            "sad": -0.6884803771972656,
+            "angry": -2.917177200317383,
+            "anxious": -4.884987831115723,
+            "calm": 1.3438072204589844
+          }
+        },
+        "sad": {
+          "steered_scores": {
+            "happy": -18.28148651123047,
+            "sad": -21.276527404785156,
+            "angry": -12.654196739196777,
+            "anxious": -5.875522136688232,
+            "calm": -13.273058891296387
+          },
+          "delta_vs_baseline": {
+            "happy": 2.5935134887695312,
+            "sad": 1.9734725952148438,
+            "angry": 3.0333032608032227,
+            "anxious": 4.124477863311768,
+            "calm": 0.4769411087036133
+          }
+        },
+        "angry": {
+          "steered_scores": {
+            "happy": -21.591732025146484,
+            "sad": -23.746065139770508,
+            "angry": -16.144189834594727,
+            "anxious": -10.45594310760498,
+            "calm": -14.670982360839844
+          },
+          "delta_vs_baseline": {
+            "happy": -0.7167320251464844,
+            "sad": -0.4960651397705078,
+            "angry": -0.45668983459472656,
+            "anxious": -0.45594310760498047,
+            "calm": -0.9209823608398438
+          }
+        },
+        "anxious": {
+          "steered_scores": {
+            "happy": -19.725305557250977,
+            "sad": -21.03305435180664,
+            "angry": -17.48626708984375,
+            "anxious": -7.291413307189941,
+            "calm": -17.385753631591797
+          },
+          "delta_vs_baseline": {
+            "happy": 1.1496944427490234,
+            "sad": 2.2169456481933594,
+            "angry": -1.79876708984375,
+            "anxious": 2.7085866928100586,
+            "calm": -3.635753631591797
+          }
+        },
+        "calm": {
+          "steered_scores": {
+            "happy": -18.03838539123535,
+            "sad": -22.715320587158203,
+            "angry": -14.570246696472168,
+            "anxious": -12.606549263000488,
+            "calm": -13.385384559631348
+          },
+          "delta_vs_baseline": {
+            "happy": 2.8366146087646484,
+            "sad": 0.5346794128417969,
+            "angry": 1.117253303527832,
+            "anxious": -2.6065492630004883,
+            "calm": 0.36461544036865234
+          }
+        }
+      }
+    },
+    {
+      "prompt": "Continue in 2-3 sentences: Theo paused in the kitchen when he noticed the back door was already open.",
+      "probe_tokens": {
+        "happy": {
+          "token_id": 5293,
+          "token_text": "happy",
+          "token_count": 1
+        },
+        "sad": {
+          "token_id": 11019,
+          "token_text": "sad",
+          "token_count": 1
+        },
+        "angry": {
+          "token_id": 23186,
+          "token_text": "angry",
+          "token_count": 1
+        },
+        "anxious": {
+          "token_id": 34835,
+          "token_text": "anxious",
+          "token_count": 1
+        },
+        "calm": {
+          "token_id": 16680,
+          "token_text": "calm",
+          "token_count": 1
+        }
+      },
+      "baseline_scores": {
+        "happy": -18.25,
+        "sad": -19.75,
+        "angry": -17.75,
+        "anxious": -9.75,
+        "calm": -16.75
+      },
+      "steered": {
+        "happy": {
+          "steered_scores": {
+            "happy": -19.76373291015625,
+            "sad": -21.36772918701172,
+            "angry": -18.394689559936523,
+            "anxious": -13.83625602722168,
+            "calm": -17.407899856567383
+          },
+          "delta_vs_baseline": {
+            "happy": -1.51373291015625,
+            "sad": -1.6177291870117188,
+            "angry": -0.6446895599365234,
+            "anxious": -4.08625602722168,
+            "calm": -0.6578998565673828
+          }
+        },
+        "sad": {
+          "steered_scores": {
+            "happy": -14.776424407958984,
+            "sad": -14.853071212768555,
+            "angry": -13.545294761657715,
+            "anxious": -5.755086898803711,
+            "calm": -16.77075958251953
+          },
+          "delta_vs_baseline": {
+            "happy": 3.4735755920410156,
+            "sad": 4.896928787231445,
+            "angry": 4.204705238342285,
+            "anxious": 3.994913101196289,
+            "calm": -0.02075958251953125
+          }
+        },
+        "angry": {
+          "steered_scores": {
+            "happy": -21.31964683532715,
+            "sad": -23.944229125976562,
+            "angry": -20.26860809326172,
+            "anxious": -9.566733360290527,
+            "calm": -21.231016159057617
+          },
+          "delta_vs_baseline": {
+            "happy": -3.0696468353271484,
+            "sad": -4.1942291259765625,
+            "angry": -2.5186080932617188,
+            "anxious": 0.18326663970947266,
+            "calm": -4.481016159057617
+          }
+        },
+        "anxious": {
+          "steered_scores": {
+            "happy": -19.44668960571289,
+            "sad": -20.72464942932129,
+            "angry": -22.612682342529297,
+            "anxious": -13.110675811767578,
+            "calm": -20.52385139465332
+          },
+          "delta_vs_baseline": {
+            "happy": -1.1966896057128906,
+            "sad": -0.9746494293212891,
+            "angry": -4.862682342529297,
+            "anxious": -3.360675811767578,
+            "calm": -3.7738513946533203
+          }
+        },
+        "calm": {
+          "steered_scores": {
+            "happy": -14.48973274230957,
+            "sad": -19.22032928466797,
+            "angry": -12.68298053741455,
+            "anxious": -6.901153564453125,
+            "calm": -11.639242172241211
+          },
+          "delta_vs_baseline": {
+            "happy": 3.7602672576904297,
+            "sad": 0.5296707153320312,
+            "angry": 5.067019462585449,
+            "anxious": 2.848846435546875,
+            "calm": 5.110757827758789
+          }
+        }
+      }
+    },
+    {
+      "prompt": "Continue in 2-3 sentences: Lena refreshed the results page and watched a new line of text appear.",
+      "probe_tokens": {
+        "happy": {
+          "token_id": 5293,
+          "token_text": "happy",
+          "token_count": 1
+        },
+        "sad": {
+          "token_id": 11019,
+          "token_text": "sad",
+          "token_count": 1
+        },
+        "angry": {
+          "token_id": 23186,
+          "token_text": "angry",
+          "token_count": 1
+        },
+        "anxious": {
+          "token_id": 34835,
+          "token_text": "anxious",
+          "token_count": 1
+        },
+        "calm": {
+          "token_id": 16680,
+          "token_text": "calm",
+          "token_count": 1
+        }
+      },
+      "baseline_scores": {
+        "happy": -19.875,
+        "sad": -21.125,
+        "angry": -17.75,
+        "anxious": -14.75,
+        "calm": -16.125
+      },
+      "steered": {
+        "happy": {
+          "steered_scores": {
+            "happy": -18.91077423095703,
+            "sad": -21.79042625427246,
+            "angry": -19.0222225189209,
+            "anxious": -16.177303314208984,
+            "calm": -14.876712799072266
+          },
+          "delta_vs_baseline": {
+            "happy": 0.9642257690429688,
+            "sad": -0.6654262542724609,
+            "angry": -1.2722225189208984,
+            "anxious": -1.4273033142089844,
+            "calm": 1.2482872009277344
+          }
+        },
+        "sad": {
+          "steered_scores": {
+            "happy": -20.67828369140625,
+            "sad": -20.528179168701172,
+            "angry": -16.530960083007812,
+            "anxious": -15.204869270324707,
+            "calm": -18.3164005279541
+          },
+          "delta_vs_baseline": {
+            "happy": -0.80328369140625,
+            "sad": 0.5968208312988281,
+            "angry": 1.2190399169921875,
+            "anxious": -0.45486927032470703,
+            "calm": -2.1914005279541016
+          }
+        },
+        "angry": {
+          "steered_scores": {
+            "happy": -20.547992706298828,
+            "sad": -22.62211036682129,
+            "angry": -18.410268783569336,
+            "anxious": -14.330747604370117,
+            "calm": -17.400117874145508
+          },
+          "delta_vs_baseline": {
+            "happy": -0.6729927062988281,
+            "sad": -1.497110366821289,
+            "angry": -0.6602687835693359,
+            "anxious": 0.4192523956298828,
+            "calm": -1.2751178741455078
+          }
+        },
+        "anxious": {
+          "steered_scores": {
+            "happy": -20.136608123779297,
+            "sad": -20.234506607055664,
+            "angry": -15.732666969299316,
+            "anxious": -12.628562927246094,
+            "calm": -18.166616439819336
+          },
+          "delta_vs_baseline": {
+            "happy": -0.2616081237792969,
+            "sad": 0.8904933929443359,
+            "angry": 2.0173330307006836,
+            "anxious": 2.1214370727539062,
+            "calm": -2.041616439819336
+          }
+        },
+        "calm": {
+          "steered_scores": {
+            "happy": -19.238279342651367,
+            "sad": -21.48227310180664,
+            "angry": -18.554834365844727,
+            "anxious": -15.714407920837402,
+            "calm": -15.44587230682373
+          },
+          "delta_vs_baseline": {
+            "happy": 0.6367206573486328,
+            "sad": -0.3572731018066406,
+            "angry": -0.8048343658447266,
+            "anxious": -0.9644079208374023,
+            "calm": 0.6791276931762695
+          }
+        }
+      }
+    }
+  ]
+}

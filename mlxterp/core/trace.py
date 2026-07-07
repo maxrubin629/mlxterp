@@ -6,9 +6,13 @@ Provides the clean context manager API:
         output = model.layers[3].self_attn.output.save()
 """
 
+import inspect
+from typing import Any, Callable, Dict, Optional, Tuple
+
 import mlx.core as mx
-from typing import Dict, Any, Optional, Callable, Union
-from .proxy import TraceContext
+
+from .activation import get_primary_tensor
+from .proxy import TraceContext, _find_matching_name
 
 
 class Trace:
@@ -29,9 +33,10 @@ class Trace:
     def __init__(
         self,
         model_forward: Callable,
-        inputs: Any,
+        inputs: Any = None,
         tokenizer: Optional[Any] = None,
         interventions: Optional[Dict[str, Callable]] = None,
+        model_inputs: Optional[Dict[str, Any]] = None,
         interpretable_model: Optional[Any] = None,
     ):
         """
@@ -39,21 +44,26 @@ class Trace:
 
         Args:
             model_forward: The forward function to call
-            inputs: Input to the model (tokens, text, or arrays)
+            inputs: Input to the model (tokens, text, arrays, or a dict of
+                    prepared model kwargs such as input_ids/pixel_values)
             tokenizer: Optional tokenizer for text inputs
             interventions: Dict mapping module names to intervention functions
+            model_inputs: Direct keyword inputs for the model forward pass
+                          (alternative to `inputs`)
             interpretable_model: The InterpretableModel instance (for layer patching)
         """
         self.model_forward = model_forward
         self.inputs = inputs
         self.tokenizer = tokenizer
         self.interventions = interventions or {}
+        self.model_inputs = model_inputs or {}
         self.interpretable_model = interpretable_model
 
         self.context: Optional[TraceContext] = None
-        self.output: Optional[mx.array] = None
-        self.saved_values: Dict[str, mx.array] = {}
-        self.activations: Dict[str, mx.array] = {}
+        self.output: Any = None
+        self.raw_output: Any = None
+        self.saved_values: Dict[str, Any] = {}
+        self.activations: Dict[str, Any] = {}
         self._patched_modules: Dict[str, Any] = {}  # name -> (parent, attr_name, original_module)
         self._module_map: Dict[str, Any] = {}  # name -> wrapper module (for lookups)
 
@@ -79,12 +89,12 @@ class Trace:
         # Execute the forward pass immediately
         # This allows users to access activations in the with block
         try:
-            # Process inputs
-            processed_inputs = self._process_inputs(self.inputs)
+            args, kwargs = self._build_forward_call()
 
             # Execute the forward pass
             # During execution, ModuleProxies will populate the context
-            self.output = self.model_forward(processed_inputs)
+            self.raw_output = self.model_forward(*args, **kwargs)
+            self.output = self._normalize_output(self.raw_output)
 
             # Store output in context for access via model.output
             if self.context:
@@ -395,9 +405,84 @@ class Trace:
         self._patched_modules = {}
         self._module_map = {}
 
+    def _build_forward_call(self) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+        """
+        Build the positional/keyword call used for the traced forward pass.
+
+        Supported modes:
+        - legacy positional input via ``inputs`` (text, tokens, arrays)
+        - prepared mapping via ``inputs`` when it is a dict
+        - direct model kwargs via ``model_inputs``
+        """
+        if self.inputs is not None and self.model_inputs:
+            raise ValueError(
+                "Pass either 'inputs' or keyword model inputs to trace(), not both."
+            )
+
+        if isinstance(self.inputs, dict):
+            return (), self._adapt_model_inputs(dict(self.inputs))
+
+        if self.model_inputs:
+            return (), self._adapt_model_inputs(dict(self.model_inputs))
+
+        if self.inputs is None:
+            raise ValueError("trace() requires inputs or keyword model inputs.")
+
+        return (self._process_inputs(self.inputs),), {}
+
+    def _adapt_model_inputs(self, model_inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply lightweight compatibility fixes to kwargs-style model inputs.
+
+        Some processors emit ``attention_mask`` while the wrapped model's
+        forward signature expects ``mask`` (common for mlx-vlm models).
+        """
+        if (
+            "attention_mask" in model_inputs
+            and "mask" not in model_inputs
+            and self._model_accepts_argument("mask")
+            and not self._model_accepts_argument("attention_mask")
+        ):
+            model_inputs["mask"] = model_inputs.pop("attention_mask")
+
+        return model_inputs
+
+    def _model_accepts_argument(self, argument_name: str) -> bool:
+        """Check whether the wrapped model exposes a named ``__call__`` argument."""
+        if self.interpretable_model is None:
+            return False
+
+        try:
+            signature = inspect.signature(self.interpretable_model.model.__call__)
+        except (TypeError, ValueError):
+            return False
+
+        return argument_name in signature.parameters
+
+    def _normalize_output(self, output: Any) -> Any:
+        """
+        Normalize model outputs for interpretability workflows.
+
+        If a model returns an object with ``.logits`` (common for mlx-vlm
+        models), expose the logits tensor as ``Trace.output``. Tuple outputs
+        are unwrapped to their primary tensor. The unmodified value is always
+        preserved in ``Trace.raw_output``.
+        """
+        logits = getattr(output, "logits", None)
+        if logits is not None:
+            return logits
+
+        if isinstance(output, (tuple, list)) and output:
+            try:
+                return get_primary_tensor(output)
+            except TypeError:
+                return output
+
+        return output
+
     def _process_inputs(self, inputs: Any) -> mx.array:
         """
-        Process inputs into the format expected by the model.
+        Process positional inputs into the format expected by the model.
 
         Handles:
         - String inputs (tokenize if tokenizer available)
@@ -444,21 +529,30 @@ class Trace:
         else:
             raise ValueError(f"Unsupported input type: {type(inputs)}")
 
-    def get(self, name: str) -> Optional[mx.array]:
+    def get(self, name: str) -> Optional[Any]:
         """
         Get a saved value by name.
+
+        Accepts shorthand names: "layers.3.attn.output" also matches values
+        saved under wrapped keys like "model.language_model.model.layers.3.attn.output".
 
         Args:
             name: The name of the saved value (e.g., "layers.3.attn.output")
 
         Returns:
-            The saved array, or None if not found
+            The saved value, or None if not found
         """
-        return self.saved_values.get(name)
+        matched_name = _find_matching_name(self.saved_values, name)
+        if matched_name is not None:
+            return self.saved_values[matched_name]
+        return None
 
-    def get_activation(self, name: str) -> Optional[mx.array]:
+    def get_activation(self, name: str) -> Optional[Any]:
         """
         Get an activation by module name.
+
+        Accepts shorthand names: "layers.3.attn" also matches activations
+        stored under wrapped keys like "model.language_model.model.layers.3.attn".
 
         Args:
             name: The module name (e.g., "layers.3.attn")
@@ -466,7 +560,10 @@ class Trace:
         Returns:
             The activation, or None if not found
         """
-        return self.activations.get(name)
+        matched_name = _find_matching_name(self.activations, name)
+        if matched_name is not None:
+            return self.activations[matched_name]
+        return None
 
     def __repr__(self):
         n_saved = len(self.saved_values)

@@ -24,7 +24,7 @@ class TestSAEIntegration:
     def model(self):
         """Load a small model for testing."""
         # Use the smallest available model for faster tests
-        model = InterpretableModel("mlx-community/Llama-3.2-1B-Instruct")
+        model = InterpretableModel("mlx-community/Llama-3.2-1B-Instruct-4bit")
         return model
 
     @pytest.fixture
@@ -122,7 +122,7 @@ class TestSAEIntegration:
             pass
 
         # Find the activation key for layer 5 MLP
-        layer_keys = [k for k in trace.activations.keys() if "layers.5" in k and "mlp" in k]
+        layer_keys = [k for k in trace.activations.keys() if k.endswith("layers.5.mlp")]
         assert len(layer_keys) > 0
 
         activation = trace.activations[layer_keys[0]]
@@ -178,7 +178,7 @@ class TestSAEIntegration:
         with model.trace(sample_texts[0]) as trace:
             pass
 
-        layer_keys = [k for k in trace.activations.keys() if "layers.5" in k and "mlp" in k]
+        layer_keys = [k for k in trace.activations.keys() if k.endswith("layers.5.mlp")]
         activation = trace.activations[layer_keys[0]]
 
         # Reconstruct
@@ -225,7 +225,7 @@ class TestSAEEdgeCases:
     @pytest.fixture(scope="class")
     def model(self):
         """Load model for testing."""
-        model = InterpretableModel("mlx-community/Llama-3.2-1B-Instruct")
+        model = InterpretableModel("mlx-community/Llama-3.2-1B-Instruct-4bit")
         return model
 
     def test_empty_dataset(self, model):

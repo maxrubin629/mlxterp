@@ -71,6 +71,18 @@ print(f"Layer 3 Q projection: {q_proj_3.shape}")
 print(f"Output: {output.shape}")
 ```
 
+Models can also be loaded by name. Loading tries mlx-lm first and falls back
+to mlx-vlm, so multimodal repos (e.g., Gemma 4) work too — the processor is
+exposed as `model.processor`:
+
+```python
+model = InterpretableModel("mlx-community/gemma-4-e2b-it-4bit")
+
+# Prepared multimodal inputs can be passed as a dict or keyword arguments
+with model.trace(input_ids=input_ids, pixel_values=pixel_values) as trace:
+    pass
+```
+
 ### With Custom Models
 
 ```python
@@ -285,7 +297,7 @@ results = model.activation_patching(
 - Negative % = layer encodes the corruption
 - ~0% = layer is not relevant
 
-### 4. Steering Vectors
+### 6. Steering Vectors
 
 Compute and apply steering vectors:
 
@@ -305,7 +317,23 @@ with model.trace("This movie is",
     steered_output = steered.activations['__model_output__']
 ```
 
-### 5. Layer Analysis
+To steer during generation (token-by-token decoding), use the `steering()`
+context manager, which applies interventions to every forward pass inside
+the block:
+
+```python
+from mlx_lm.generate import stream_generate
+
+with model.steering({"layers.10": iv.add_vector(steering_vector)}):
+    for response in stream_generate(model.model, model.tokenizer, prompt, max_tokens=100):
+        print(response.text, end="")
+```
+
+See [examples/emotion_steering](examples/emotion_steering/) for a complete
+workflow: learning per-emotion steering vectors from residual-stream
+activations and chatting with a steered model interactively.
+
+### 7. Layer Analysis
 
 Analyze representations across layers:
 

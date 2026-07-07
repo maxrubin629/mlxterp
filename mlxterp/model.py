@@ -5,13 +5,14 @@ Provides a clean, intuitive API for mechanistic interpretability on MLX models.
 """
 
 from collections import deque
+from contextlib import contextmanager
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import mlx.core as mx
 import mlx.nn as nn
 
 from .analysis import AnalysisMixin
-from .core import LayerListProxy, ModuleProxy, ModuleResolver, Trace
+from .core import LayerListProxy, ModuleProxy, ModuleResolver, Trace, TraceContext
 from .sae_mixin import SAEMixin
 from .tokenization import TokenizerMixin
 
@@ -47,6 +48,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
         self,
         model: Union[nn.Module, str],
         tokenizer: Optional[Any] = None,
+        processor: Optional[Any] = None,
         layer_attr: str = "layers",
         embedding_path: Optional[str] = None,
         norm_path: Optional[str] = None,
@@ -57,8 +59,10 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
 
         Args:
             model: Either an nn.Module instance or a model name/path string.
-                   If string, attempts to load via mlx_lm or other loaders.
+                   If string, attempts to load via mlx_lm or mlx_vlm.
             tokenizer: Optional tokenizer for processing text inputs
+            processor: Optional processor for multimodal models. If provided and
+                       tokenizer is None, ``processor.tokenizer`` is used.
             layer_attr: Name of the attribute containing model layers (default: "layers")
             embedding_path: Override path for token embedding layer (e.g., "my_embed").
                            Used for weight-tied output projection in get_token_predictions.
@@ -72,7 +76,14 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
             AttributeError: If layer_attr doesn't exist on the model
         """
         # Initialize tokenizer before model loading (needed by _load_model)
+        self.processor = processor
         self.tokenizer = tokenizer
+        if (
+            self.tokenizer is None
+            and self.processor is not None
+            and hasattr(self.processor, "tokenizer")
+        ):
+            self.tokenizer = self.processor.tokenizer
 
         # Handle model loading
         if isinstance(model, str):
@@ -105,7 +116,7 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
 
         Tries multiple loading strategies:
         1. mlx_lm.load() for language models
-        2. Add more loaders as needed
+        2. mlx_vlm.load() for multimodal models (e.g., Gemma 4)
 
         Args:
             model_name: Model name or path
@@ -133,6 +144,26 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
             )
         except Exception as e:
             errors.append(f"mlx-lm failed to load model: {str(e)}")
+
+        # Try mlx_vlm (multimodal models such as Gemma 4; also usable text-only)
+        try:
+            from mlx_vlm import load as load_vlm
+
+            model, processor_obj = load_vlm(model_name)
+
+            if self.processor is None:
+                self.processor = processor_obj
+
+            if self.tokenizer is None:
+                self.tokenizer = getattr(self.processor, "tokenizer", None)
+
+            return model
+        except ImportError:
+            errors.append(
+                "mlx-vlm not installed. Install with: uv add mlx-vlm (or pip install mlx-vlm)"
+            )
+        except Exception as e:
+            errors.append(f"mlx-vlm failed to load model: {str(e)}")
 
         # Add other loading strategies here
         # - HuggingFace transformers
@@ -256,8 +287,9 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
 
     def trace(
         self,
-        inputs: Union[str, List[str], mx.array, List[int]],
+        inputs: Optional[Union[str, List[str], mx.array, List[int], Dict[str, Any]]] = None,
         interventions: Optional[Dict[str, Callable]] = None,
+        **model_inputs: Any,
     ) -> Trace:
         """
         Create a tracing context for the model.
@@ -275,8 +307,11 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
                 - List of strings: ["Hello", "World"] (batch, requires tokenizer)
                 - mx.array: Token array
                 - List[int]: Token list
+                - Dict[str, Any]: Prepared model kwargs such as input_ids/pixel_values
             interventions: Optional dict mapping module names to intervention functions
                 Example: {"layers.3.attn": lambda x: x * 0.5}
+            **model_inputs: Direct keyword inputs for the wrapped model forward pass.
+                Example: trace(input_ids=..., pixel_values=..., attention_mask=...)
 
         Returns:
             Trace context manager
@@ -286,16 +321,53 @@ class InterpretableModel(TokenizerMixin, AnalysisMixin, SAEMixin):
             inputs=inputs,
             tokenizer=self.tokenizer,
             interventions=interventions,
+            model_inputs=model_inputs or None,
             interpretable_model=self,
         )
 
-    def _forward(self, inputs: mx.array) -> Any:
+    def _forward(self, *args: Any, **kwargs: Any) -> Any:
         """
         Execute the model forward pass.
 
         This is called by the Trace context manager.
         """
-        return self.model(inputs)
+        return self.model(*args, **kwargs)
+
+    @contextmanager
+    def steering(self, interventions: Optional[Dict[str, Callable]] = None):
+        """
+        Apply interventions to every forward pass inside the block.
+
+        Unlike trace(), this does not run the model itself - it patches the
+        model's layers so that any forward passes executed inside the block
+        (for example, token-by-token generation loops) have the interventions
+        applied on each call.
+
+        Usage:
+            steering_vector = mx.array(...)
+            with model.steering({"layers.20": iv.add_vector(steering_vector)}):
+                text = generate(model.model, tokenizer, prompt, ...)
+
+        Args:
+            interventions: Dict mapping module names to intervention functions.
+                None or an empty dict patches nothing and simply runs the block.
+        """
+        trace = Trace(
+            model_forward=self._forward,
+            interventions=interventions,
+            interpretable_model=self,
+        )
+        trace.context = TraceContext()
+        for name, fn in trace.interventions.items():
+            trace.context.interventions[name] = fn
+
+        TraceContext.push(trace.context)
+        trace._patch_model_layers()
+        try:
+            yield
+        finally:
+            trace._restore_model_layers()
+            TraceContext.pop()
 
     def __call__(self, *args, **kwargs):
         """
