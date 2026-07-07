@@ -19,6 +19,10 @@ _WRAPPER_PREFIXES = (
     "model.",
 )
 
+_AMBIGUOUS_OUTPUT_PROJECTION_NAMES = {
+    "per_layer_model_projection",
+}
+
 
 def _canonicalize_module_name(name: str) -> str:
     """
@@ -180,15 +184,19 @@ class ModuleResolver:
 
         return None, None
 
-    def _is_valid_output_projection(self, module: Any) -> bool:
+    def _is_valid_output_projection(self, path: str, module: Any) -> bool:
         """
         Check whether a candidate module looks like a vocab projection.
 
-        If we can compare against the token embedding shape, require the output
-        dimension to match the embedding vocab size. This filters out internal
-        projection layers such as Gemma 4's ``per_layer_model_projection`` while
-        still allowing genuine wrapped lm heads.
+        Only apply vocab-size validation to ambiguous internal projection names
+        like ``per_layer_model_projection``. Standard lm_head-style paths should
+        be accepted as-is, even when the output size differs from the embedding
+        table (for example, untied or padded vocab heads).
         """
+        normalized_path = _canonicalize_module_name(path)
+        if normalized_path not in _AMBIGUOUS_OUTPUT_PROJECTION_NAMES:
+            return True
+
         if not hasattr(module, "weight") or not hasattr(module.weight, "shape"):
             return True
 
@@ -276,34 +284,29 @@ class ModuleResolver:
         if self._lm_head_cache is not None:
             return self._lm_head_cache
 
-        # First try to find explicit lm_head
-        paths_to_try = (
-            [self._lm_head_path] if self._lm_head_path is not None else self.LM_HEAD_PATHS
-        )
+        # First try explicit override exactly as given.
         if self._lm_head_path is not None:
-            paths_to_try = paths_to_try + [
-                path for path in self.LM_HEAD_PATHS if path != self._lm_head_path
-            ]
+            module = self._resolve_path(self._lm_head_path)
+            if module is not None:
+                self._lm_head_cache = (module, self._lm_head_path, False)
+                return module, self._lm_head_path, False
+
+            warnings.warn(
+                f"Override path '{self._lm_head_path}' for lm_head not found. "
+                "Falling back to automatic resolution.",
+                stacklevel=2,
+            )
+
+        # Then try automatic fallback paths.
+        paths_to_try = [path for path in self.LM_HEAD_PATHS if path != self._lm_head_path]
 
         for path in paths_to_try:
             module = self._resolve_path(path)
             if module is None:
-                if path == self._lm_head_path:
-                    warnings.warn(
-                        f"Override path '{path}' for lm_head not found. "
-                        "Falling back to automatic resolution.",
-                        stacklevel=2,
-                    )
                 continue
-            if self._is_valid_output_projection(module):
+            if self._is_valid_output_projection(path, module):
                 self._lm_head_cache = (module, path, False)
                 return module, path, False
-            if path == self._lm_head_path:
-                warnings.warn(
-                    f"Override path '{path}' for lm_head does not look like a vocab projection. "
-                    "Falling back to automatic resolution.",
-                    stacklevel=2,
-                )
 
         # Fall back to weight-tied embedding
         embedding = self.get_embedding_layer()

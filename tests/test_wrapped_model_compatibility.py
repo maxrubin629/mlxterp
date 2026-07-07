@@ -205,6 +205,24 @@ class GemmaLikeWrappedModel(nn.Module):
         return self.language_model(tokens)
 
 
+class UntiedHeadModel(nn.Module):
+    """Model with a valid untied lm_head larger than the embedding table."""
+
+    def __init__(self, vocab_size: int = 10, lm_head_size: int = 12, hidden_dim: int = 8):
+        super().__init__()
+        self.layers = [TupleLayer(0.5), TupleLayer(1.0)]
+        self.embed_tokens = nn.Embedding(vocab_size, hidden_dim)
+        self.norm = nn.LayerNorm(hidden_dim)
+        self.lm_head = nn.Linear(hidden_dim, lm_head_size)
+
+    def __call__(self, tokens: mx.array) -> mx.array:
+        hidden = self.embed_tokens(tokens)
+        for layer in self.layers:
+            hidden, _, _ = layer(hidden)
+        hidden = self.norm(hidden)
+        return self.lm_head(hidden)
+
+
 def test_replace_with_tuple_preserves_auxiliary_outputs():
     """`replace_with` should patch tuple outputs without clobbering aux values."""
     target = (mx.zeros((1, 5, 4)), {"cache": "original"}, 3)
@@ -347,3 +365,29 @@ def test_tied_wrapped_models_ignore_internal_projection_for_output_head():
     )
 
     assert tuned_lens.hidden_dim == 8
+
+
+def test_untied_lm_head_is_not_rejected_when_vocab_size_differs():
+    """Valid untied lm_heads should win over embedding fallback."""
+    model = InterpretableModel(UntiedHeadModel(), tokenizer=SimpleTokenizer(vocab_size=12))
+
+    projection, projection_path, is_weight_tied = model._module_resolver.get_output_projection()
+
+    assert projection is model.model.lm_head
+    assert projection_path == "lm_head"
+    assert is_weight_tied is False
+
+
+def test_explicit_lm_head_override_is_respected_for_untied_heads():
+    """Explicit lm_head overrides should not be filtered by embedding shape."""
+    model = InterpretableModel(
+        UntiedHeadModel(),
+        tokenizer=SimpleTokenizer(vocab_size=12),
+        lm_head_path="lm_head",
+    )
+
+    projection, projection_path, is_weight_tied = model._module_resolver.get_output_projection()
+
+    assert projection is model.model.lm_head
+    assert projection_path == "lm_head"
+    assert is_weight_tied is False
